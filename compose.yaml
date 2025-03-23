@@ -1,0 +1,28 @@
+services: 
+  short_term_db:
+    image: timescale/timescaledb-ha:pg17
+    ports:
+      - 5431:5432
+    environment:
+      - POSTGRES_DB=short_term
+      - POSTGRES_USER=${POSTGRESS_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - short_term_data:/home/postgres/pgdata/data
+    restart: unless-stopped
+  
+  long_term_db:
+    image: timescale/timescaledb-ha:pg17
+    ports:
+      - 5430:5432
+    environment:
+      - POSTGRES_DB=long_term
+      - POSTGRES_USER=${POSTGRESS_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - long_term_data:/home/postgres/pgdata/data
+    restart: unless-stopped
+    
+volumes:
+  short_term_data:
+  long_term_data:
