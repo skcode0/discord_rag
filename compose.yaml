@@ -2,9 +2,9 @@ services:
   short_term_db:
     image: timescale/timescaledb-ha:pg17
     ports:
-      - 5431:5432
+      - ${SHORT_TERM_HOST_PORT}:5432
     environment:
-      - POSTGRES_DB=short_term
+      - POSTGRES_DB=${SHORT_TERM_DB}
       - POSTGRES_USER=${POSTGRESS_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
@@ -14,9 +14,9 @@ services:
   long_term_db:
     image: timescale/timescaledb-ha:pg17
     ports:
-      - 5430:5432
+      - ${LONG_TERM_HOST_PORT}:5432
     environment:
-      - POSTGRES_DB=long_term
+      - POSTGRES_DB=${LONG_TERM_DB}
       - POSTGRES_USER=${POSTGRESS_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
