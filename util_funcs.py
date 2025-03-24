@@ -8,11 +8,6 @@ from typing import Optional, Type, Any, Dict, List, Union
 import ast
 
 
-# transcription
-# add to db
-# llm output/response (agent: rag search)
-# add to db
-
 def make_pgdb(password: str, db: str, user: Optional[str]="postgres", host: Optional[str]="localhost", port: Optional[int]=5432, add_vectors: Optional[bool]=False):
     """
     If database doesn't exist, create one.
