@@ -1,10 +1,12 @@
 import os
-from util_funcs import make_pgdb
+from db.db_util_funcs import make_pgdb
 from sqlalchemy import create_engine, String, Column, Integer, DateTime, func, Index
 from sqlalchemy.orm import declarative_base, sessionmaker
 from pgvector.sqlalchemy import Vector
 from datetime import datetime
 import subprocess
+import discord
+from discord.ext import commands
 
 # --------------------------
 # start docker compose command
@@ -18,13 +20,18 @@ except subprocess.CalledProcessError as e:
     print("Error running docker-compose:", e.stderr)
 
 # --------------------------
-# Connecting to database
+# Load in environment variables
 # --------------------------
 pg_username = os.environ.get('POSTGRESS_USER')
 pg_password = os.environ.get('POSTGRES_PASSWORD')
 db_name = os.environ.get('SHORT_TERM_DB')
 port = os.environ.get('SHORT_TERM_HOST_PORT')
+embedding_dim = int(os.environ.get('EMBEDDING_DIM'))
+embedding_model = os.environ.get('EMBEDDING_MODEL')
 
+# --------------------------
+# Connect to database
+# --------------------------
 # creates db if there's none
 url = make_pgdb(password=pg_password,
                 db=db_name,
@@ -35,9 +42,6 @@ engine = create_engine(url, echo=False)
 Base = declarative_base()
 Session = sessionmaker(bind=engine)
 session = Session()
-
-# IMPORTANT: check and change value if necessary when you use different embedding model
-embedding_dim = 1024
 
 class Vectors(Base):
     __tablename__ = "vectors"
@@ -71,12 +75,40 @@ path = "storage/" + f"{today}"
 
 
 # --------------------------
-# Start discord, create embeddings, and add vectors to db
+# Add discord messages as vector embeddings
 # --------------------------
-#TODO embedding model (other option: bge-m3 567M)
-# intfloat/multilingual-e5-large-instruct (560M)
-embedding_model = None
+
+bot = commands.Bot(command_prefix="/", intents=discord.Intents.all())
+
+@bot.event
+async def on_ready():
+    print(f"Logged on as {bot.user}!")
+
+@bot.event
+async def on_message(message):
+    # ignore replaying to itself
+    if message.author == bot.user:
+        return
+    
+    # TODO
+    await message.reply()
 
 
 
+# bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
+
+# @bot.event
+# async def on_ready():
+#     print(f"Logged on as {bot.user}!")
+
+# @bot.event
+# async def on_message(message):
+#     # ignore replying to itself
+#     if message.author == bot.user:
+#         return
+
+#     await message.reply(inference_message(message.content), mention_author=True)
+
+
+# bot.run(discord_bot_token)
 

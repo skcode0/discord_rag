@@ -22,6 +22,7 @@ Discord messages are saved as vector embeddings and retrieved using StreamingDis
 - Scroll to `Bot Permissions` and click `Administrator`
 - You'll see `generated url` with a unique link. Copy and paste the link on web browser. It'll redirect to discord app and ask for permissions (make sure to choose the right server for the bot).
 - After given permission, Bot should be in the server (offline)
+- After you put the intial code, you'll need to put in token to actually run the bot. You can find that token by going to the `Bot` tab again, clicking on `Reset Token`, do authentication, and `Copy` token. Paste it inside `.env` file and name it `DISCORD_TOKEN`. 
 
 <h1>Tools used:</h1>
 - Docker
