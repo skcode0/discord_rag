@@ -1,0 +1,328 @@
+from sqlalchemy_utils import database_exists, create_database
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import declarative_base, Session, sessionmaker
+import os
+import csv
+from typing import Optional, Type, Any, Dict, List, Union
+import ast
+import random
+import string
+from datetime import datetime
+
+# --------------------------
+# SQLAlchemy
+# --------------------------
+
+def make_pgdb(password: str, db: str, user: Optional[str]="postgres", host: Optional[str]="localhost", port: Optional[int]=5432, add_vectors: Optional[bool]=False):
+    """
+    If database doesn't exist, create one.
+    Reference: Connect to PostgreSQL Using SQLAlchemy & Python (https://www.youtube.com/watch?v=neW9Y9xh4jc)
+
+    - password: postgres password
+    - db: database name
+    - user: postgres username
+    - host: host network name
+    - port: database port number
+    - add_vectors: enable vector embedding or not
+
+    Returns postgres url
+    """
+    
+    # postgresql + pschcopg3
+    url = f'postgresql+psycopg://{user}:{password}@{host}:{port}/{db}'
+    
+    if not database_exists(url):
+        create_database(url)
+        print(f"Database {db} has been sucessfully created.")
+    else:
+        print(f"The database with '{db}' name already exists.")
+
+    if add_vectors:
+        enable_vectors(url)
+    
+    return url
+
+
+def enable_vectors(url: str) -> None:
+        """
+            Add pgvectorscale to db
+
+            - url: postgres db url
+        """
+        engine = create_engine(url)
+        with Session(engine) as session: # will auto close
+            session.execute(text("CREATE EXTENSION IF NOT EXISTS vectorscale CASCADE;")) # CASCADE will automatically install pgvector
+            session.commit()
+        print("Vectorscale enabled.")
+
+
+Base = declarative_base()
+def add_row(table: Type[Base], session: Session, info: Dict[str, Any], file_path: Optional[str] = None) -> None:
+    """
+    Add record.
+
+    - table: table to add row
+    - session: pg session
+    - info: row data
+    - file_path: csv file
+
+    """
+    # TODO: spread these and add dynamically
+    time_spoken = info['time']
+    speaker = info['speaker']
+    text = info['text']
+    embedding = info['embedding']
+
+    try:
+        session.add(table(time_spoken=time_spoken,
+                            speaker=speaker,
+                            text=text,
+                            embedding=embedding))
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+
+        # put failed to add record in text file for later
+        write_row_to_csv(info, file_path)
+
+        print(f"Error adding record. Non-added record is stored inside {file_path}.")
+
+
+#TODO
+import numpy as np
+def query_vector(query: List[Union[int, float]], db_url: str, search_list_size: int=100, rescore: int=50,  top_k: int=5) -> List[Dict]:
+    """
+    Use streamingDiskAnn to get relevant queries from short-term long-term memory (temporary db)
+
+    - query: vectorized query input
+    - db_url: url to postgres database
+    - search_list_size: number of additional candidates considered during the graph search
+    - rescore: re-evaluating the distances of candidate points to improve the precision of the results
+    - top_k: get top k results
+    """
+    engine = create_engine(db_url) 
+    Session = sessionmaker(bind=engine) #todo: need to do something about this session so that it doesn't affect the main session
+    session = Session()
+
+    # https://github.com/timescale/pgvectorscale/blob/main/README.md?utm_source=chatgpt.com
+    session.execute(text(f"SET diskann.query_search_list_size = {search_list_size}"))
+    session.execute(text(f"SET diskann.query_rescore = {rescore}")) 
+
+    # <=> = cosine DISTANCE (1 - cosine similarity); lower the distance, the better
+    sql = text("""
+                WITH relaxed_results AS MATERIALIZED (
+                SELECT 
+                    *,
+                    embedding <=> :embedding AS distance
+                FROM vectors
+                ORDER BY distance
+                LIMIT :limit)
+               
+                SELECT * 
+                FROM relaxed_results 
+                ORDER BY distance;
+               """)
+    
+    params = {
+        'embedding': str(query),  # seems like vector embedding needs to be passed in as string
+        'limit': top_k
+    }
+
+    result = session.execute(sql, params)
+    rows = result.fetchall()
+
+    columns = result.keys()
+    
+    session.close()
+    return [dict(zip(columns, row)) for row in rows]
+
+# TODO
+def shutdown_protocol():
+    """
+    When program stops, do this.
+    """
+    # write all data to long-term db
+
+    # delete temp database rows
+
+    # close session
+    pass
+
+
+# --------------------------
+# File Saving
+# --------------------------
+def name_program_session() -> str:
+    """
+    Creates a folder with a program session name.
+
+    Returns a string if new program session folder is created, or keeping a previous one.
+    """
+    path_dir = './db/storage'
+    session_name = os.environ.get('PROGRAM_SESSION')
+
+    if session_name:
+        acceptable_ans = {"yes", "y", "no", "n"}
+        current_str = f"Your current program session name is: {session_name}. If you would like to keep the current session name, type yes (y). If not, type no (n): "
+        confirm = input(current_str)
+
+        ans = confirm.lower().strip()
+        while ans not in acceptable_ans:
+            confirm = input(f"Only acceptable answers are: {acceptable_ans}. " + current_str) 
+
+        if ans in {"yes", "y"}:
+            return f"Keeping program session name: {session_name}."
+        else: # (no, n)
+            note_str = "Note that session name will be saved in lowercase letters. Also, if left empty, session name will be: number + randomly generated alphanumeric string and today's date (ex. '1_as30k1mm_3-27-2025'): "
+
+            session_name = input("Create a session name (for file saving). " + note_str).lower().strip()
+
+            validity_message = """
+            Your file name is invalid for windows file systen. You CANNOT have:
+                - special characters: <>:"/\\|?*
+                - trailing spaces or periods
+                - reserved names (CON, PRN, AUX, NUL, COM1-COM9, LPT1-LPT9, etc.)
+            """
+            while not is_valid_windows_name(session_name):
+                session_name = session_name = input(validity_message + "\t Create a session name (for file saving). " + note_str).lower().strip()
+            
+            while os.path.isdir(os.path.join(path_dir, session_name)):
+                new_name = input(f"Folder named '{session_name}' already exists in storage folder. If you want to keep using {session_name}, confirm with '/confirm', else, give a new session name. " + note_str)
+                
+                new_name = new_name.lower().strip()
+                if new_name == '/confirm':
+                    return f"Keeping program session name: {session_name}."
+                else:
+                    while not is_valid_windows_name(new_name):
+                        new_name = input(validity_message + "\t Give a valid session name: ").lower().strip()
+                    session_name = new_name
+
+            os.environ['FILE_NUM'] = 1
+    else:
+        session_name = create_session_name()
+
+    os.environ['PROGRAM_SESSION'] = session_name
+    os.mkdir(session_name)
+    return f"{session_name} folder created."
+
+
+
+def create_session_name(str_len: int = 6) -> str:
+        """
+        Creates a randomly generated alphnumeric session name
+
+        - str_len: length of randomly generated string
+
+        Returns a string of randomly generated name + local datetime
+        """
+        alphanum_chars = string.ascii_lowercase + string.digits
+        today = datetime.today().strftime('%Y-%m-%d')
+
+        session_name = "".join(random.choices(alphanum_chars, k=str_len)) + today
+        return session_name
+
+#TODO
+def is_valid_windows_name(name) -> bool:
+    """
+    Validates if the directory/file name is valid
+
+    - name: folder/file name
+
+    Returns bool that check if the name is valid or not
+    """
+    invalid_chars = set('<>:"/\\|?*')
+    if any(char in invalid_chars for char in name):
+        return False
+    
+    if name.endswith(' ') or name.endswith('.'):
+        return False
+    
+    base_name = os.path.splitext(name)[0].upper()
+    win_reserved = {"CON", "PRN", "AUX", "NUL",
+                "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+                "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"}
+    if base_name in win_reserved:
+        return False
+
+    return True
+
+    
+
+def write_row_to_csv(data: Dict[str, Any], file_path: Optional[str] = "output.csv") -> None:
+    """
+    Write dict of data to csv
+
+    - data: row (dict) to be added
+    - file_path: name of output csv file
+    """
+    # if path doesn't have .csv
+    if not file_path.endswith(".csv"):
+         file_path += ".csv"
+
+    file_exists = False
+    if os.path.exists(file_path):
+        file_exists = True
+    
+    # append data
+    fieldnames = data.keys()
+    with open(file_path, 'a', newline='', encoding='utf-8') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+        # if file doesn't exist, add header
+        if not file_exists:
+             writer.writeheader()
+
+        writer.writerow(data) # singular
+
+def write_rows_to_csv(data: List[Dict[str, Any]], file_path: Optional[str] = "output.csv") -> None:
+    """
+    Write list of dict of data to csv
+
+    - data: list of rows (dict) to be added
+    - file_path: name of output csv file
+    """
+    # if path doesn't have .csv
+    if not file_path.endswith(".csv"):
+         file_path += ".csv"
+
+    file_exists = False
+    if os.path.exists(file_path):
+        file_exists = True
+    
+    # append data
+    fieldnames = data[0].keys()
+    with open(file_path, 'a', newline='', encoding='utf-8') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+        # if file doesn't exist, add header
+        if not file_exists:
+             writer.writeheader()
+
+        writer.writerows(data) # multiple
+
+
+def csv_to_dict(file) -> list[dict]:
+    """
+    Read csv file
+
+    - file: csv file name
+
+    Returns list of dict
+    """
+    with open(file, newline='', encoding='utf-8') as csvfile:
+        reader = csv.DictReader(csvfile)
+    
+        data = []
+        for row in reader:
+            for k,v in row.items():
+                try: 
+                    row[k] = ast.literal_eval(v) # convert text back to actual data type
+                except (ValueError, SyntaxError):
+                    pass # keep as string if conversion fails
+        data.append(row)
+
+    return data
+
+
+
