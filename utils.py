@@ -151,7 +151,7 @@ def shutdown_protocol():
 
 
 # --------------------------
-# File Saving
+# Folder/File Saving
 # --------------------------
 def name_program_session() -> str:
     """
@@ -162,6 +162,11 @@ def name_program_session() -> str:
     path_dir = './db/storage'
     session_name = os.environ.get('PROGRAM_SESSION')
 
+    # TODO: review
+    # session name, no change
+    # session name, change (check valid) --> no change
+    # session name, change (check valid)
+    # ...
     if session_name:
         acceptable_ans = {"yes", "y", "no", "n"}
         current_str = f"Your current program session name is: {session_name}. If you would like to keep the current session name, type yes (y). If not, type no (n): "
@@ -204,8 +209,7 @@ def name_program_session() -> str:
 
     os.environ['PROGRAM_SESSION'] = session_name
     os.mkdir(session_name)
-    return f"{session_name} folder created."
-
+    return f"{session_name} session folder created inside storage folder."
 
 
 def create_session_name(str_len: int = 6) -> str:
@@ -220,9 +224,10 @@ def create_session_name(str_len: int = 6) -> str:
         today = datetime.today().strftime('%Y-%m-%d')
 
         session_name = "".join(random.choices(alphanum_chars, k=str_len)) + today
+
         return session_name
 
-#TODO
+
 def is_valid_windows_name(name) -> bool:
     """
     Validates if the directory/file name is valid
