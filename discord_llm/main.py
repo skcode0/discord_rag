@@ -1,7 +1,7 @@
 import os
-from db.db_util_funcs import make_pgdb
-from sqlalchemy import create_engine, String, Column, Integer, DateTime, func, Index
-from sqlalchemy.orm import declarative_base, sessionmaker
+from db.db_utils import make_pgdb
+from sqlalchemy import create_engine, Index
+from sqlalchemy.orm import DeclarativeBase, sessionmaker, mapped_column, Mapped
 from pgvector.sqlalchemy import Vector
 from datetime import datetime
 import subprocess
@@ -9,9 +9,9 @@ import discord
 from discord.ext import commands
 
 # --------------------------
-# start docker compose command
+# start docker compose command for DB
 # --------------------------
-command = ["docker", "compose", "up", "-d"]
+command = ["docker", "compose", "-f", "../db/compose.yaml", "up", "-d"]
 
 try:
     result = subprocess.run(command, check=True, capture_output=True, text=True)
@@ -30,7 +30,7 @@ embedding_dim = int(os.environ.get('EMBEDDING_DIM'))
 embedding_model = os.environ.get('EMBEDDING_MODEL')
 
 # --------------------------
-# Connect to database
+# Create database and table if not present
 # --------------------------
 # creates db if there's none
 url = make_pgdb(password=pg_password,
@@ -39,18 +39,21 @@ url = make_pgdb(password=pg_password,
                 add_vectors=True)
 
 engine = create_engine(url, echo=False)
-Base = declarative_base()
-Session = sessionmaker(bind=engine)
-session = Session()
 
+class Base(DeclarativeBase):
+    pass
+
+# TODO
 class Vectors(Base):
+    # Reference: https://www.youtube.com/watch?v=iwENqqgxm-g&list=PLKm_OLZcymWhtiM-0oQE2ABrrbgsndsn0
     __tablename__ = "vectors"
-    id = Column(Integer, primary_key=True) # will auto increment
-    time_spoken = Column(DateTime, nullable=False)
-    speaker = Column(String, nullable=False)
-    text = Column(String, nullable=False)
-    embedding = Column(Vector(embedding_dim), nullable=False)
+    id: Mapped[int] = mapped_column(primary_key=True) # will auto increment
+    time_spoken: Mapped[datetime]
+    speaker: Mapped[str]
+    text: Mapped[str]
+    embedding = mapped_column(Vector(embedding_dim))
 
+    # Reference: https://www.youtube.com/watch?v=WsDVBEmTlaI&list=PLKm_OLZcymWhtiM-0oQE2ABrrbgsndsn0&index=15
     # StreamingDiskAnn index
     __table_args__ = (
         Index(
@@ -69,14 +72,20 @@ Base.metadata.create_all(engine) # prevents duplicate tables
 
 today = datetime.today().strftime('%Y_%m_%d')
 # for rows that were not sucessfully added to db for some reason (ex. duplicates, inserting null in non-nullable column, etc.)
-not_added_path = "storage/" + f"rows_not_added_{today}.csv" 
+storage_path = '../db/storage'
+not_added_path = storage_path + f"rows_not_added_{today}.csv" 
 # for storing all data in csv format
-path = "storage/" + f"{today}"
+path = storage_path + f"{today}"
 
 
 # --------------------------
 # Add discord messages as vector embeddings
 # --------------------------
+
+# TODO
+# Session = sessionmaker(bind=engine)
+# session = Session()
+
 
 bot = commands.Bot(command_prefix="/", intents=discord.Intents.all())
 

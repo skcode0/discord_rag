@@ -138,6 +138,7 @@ def add_row(table: Type[Base], session: Session, info: Dict[str, Any], file_path
     - file_path: csv file
 
     """
+    # TODO: spread these and add dynamically
     time_spoken = info['time']
     speaker = info['speaker']
     text = info['text']
