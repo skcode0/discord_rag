@@ -252,6 +252,7 @@ def validate_ans(acceptable_ans: Union[list, set], question: str) -> str:
     
     return ans
 
+
 def append_date(name: str, format: Optional[str]='%Y-%m-%d', date: Optional[str]=None) -> str:
     """
     Append date to end of name
@@ -335,7 +336,7 @@ def check_dir(path_dir:str, session_name:str) -> str:
     return session_name
 
 
-
+# TODO: get session folder?
 def write_row_to_csv(data: Dict[str, Any], file_path: Optional[str] = "output.csv") -> None:
     """
     Write dict of data to csv
@@ -362,6 +363,7 @@ def write_row_to_csv(data: Dict[str, Any], file_path: Optional[str] = "output.cs
 
         writer.writerow(data) # singular
 
+# TODO: get session folder?
 def write_rows_to_csv(data: List[Dict[str, Any]], file_path: Optional[str] = "output.csv") -> None:
     """
     Write list of dict of data to csv
@@ -384,7 +386,7 @@ def write_rows_to_csv(data: List[Dict[str, Any]], file_path: Optional[str] = "ou
 
         # if file doesn't exist, add header
         if not file_exists:
-             writer.writeheader()
+            writer.writeheader()
 
         writer.writerows(data) # multiple
 
@@ -397,6 +399,9 @@ def csv_to_dict(file) -> list[dict]:
 
     Returns list of dict
     """
+    if not file.endswith(".csv"):
+         file += ".csv"
+
     with open(file, newline='', encoding='utf-8') as csvfile:
         reader = csv.DictReader(csvfile)
     
@@ -411,5 +416,6 @@ def csv_to_dict(file) -> list[dict]:
 
     return data
 
-
+#TODO: make another function for csv_to_pandas
+#TODO pandas --> postgres 
 
