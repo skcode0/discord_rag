@@ -164,11 +164,6 @@ def name_program_session() -> None:
 
     session_name = os.environ.get('PROGRAM_SESSION')
 
-    # TODO: review
-    # session name, no change
-    # session name, change (check valid) --> no change
-    # session name, change (check valid)
-    # ...
     if session_name:
         acceptable_ans = {"yes", "y", "no", "n"}
         current_str = f"Your current program session name is: {session_name}. If you would like to keep the current session name, type yes (y). If not, type no (n): "
@@ -180,54 +175,54 @@ def name_program_session() -> None:
             print(f"Keeping program session name: {session_name}.")
             return
         else: # {no, n}
-            note_str = "Note that session name will be saved in lowercase letters. Also, if left empty, session name will be: number + randomly generated alphanumeric string and today's date (ex. '1_as30k1mm_3-27-2025'): "
+            note_str = "Note that session name will be saved in lowercase letters. Also, if left empty, session name will be randomly generated alphanumeric string and today's date (ex. 'as30k1mm_3-27-2025'): "
 
             session_name = input("Create a session name (for file saving). " + note_str).lower().strip()
             
             if session_name == "":
                 session_name = create_session_name()
-                #TODO: check for duplicate folder
+                # for some reason, there may be existing session folders while PROGRAM_SESSION=''
+                session_name = check_dir(path_dir=path_dir,
+                                         session_name=session_name)
             else:
                 add_date = validate_ans(acceptable_ans=acceptable_ans,
                                     question="Add today's date at the end (y,n)? ")
                 
                 if add_date in {"yes", "y"}:
-                    append_date(name=session_name)
+                    session_name = append_date(name=session_name)
 
                 validity_message = """
                 Your file name is invalid for windows file systen. You CANNOT have:
                     - special characters: <>:"/\\|?*
                     - trailing spaces or periods
-                    - reserved names (CON, PRN, AUX, NUL, COM1-COM9, LPT1-LPT9, etc.)
+                    - reserved Windows names (CON, PRN, AUX, NUL, COM1-COM9, LPT1-LPT9)
                 """
                 while not is_valid_windows_name(session_name):
-                    session_name = input(validity_message + "\tCreate a session name (for file saving). " + note_str).lower().strip()
-                
-                #TODO: make it as function
-                while os.path.isdir(os.path.join(path_dir, session_name)):
-                    new_name = input(f"Folder named '{session_name}' already exists in storage folder. If you want to keep using {session_name}, confirm with '/confirm', else, give a new session name. " + note_str)
-                    
-                    new_name = new_name.lower().strip()
-                    if new_name == '/confirm':
-                        print(f"Keeping program session name: {session_name}.")
-                        return
-                    else:
-                        while not is_valid_windows_name(new_name):
-                            new_name = input(validity_message + "\tGive a valid session name: ").lower().strip()
-                        session_name = new_name
+                    session_name = input(validity_message + "\nCreate a session name (for file saving). " + note_str).lower().strip()
+
+                session_name = check_dir(path_dir=path_dir,
+                                         session_name=session_name)
             
             set_key(".env", "FILE_NUM", "1")
     else:
         session_name = create_session_name()
-        #TODO: check for duplicate folder
+        # for some reason, there may be existing session folders while PROGRAM_SESSION=''
+        session_name = check_dir(path_dir=path_dir,
+                                 session_name=session_name)
 
-    # os.environ['PROGRAM_SESSION'] = session_name
-    set_key(".env", "PROGRAM_SESSION", session_name)
-    os.mkdir(os.path.join(path_dir, session_name))
-    print(f"{session_name} session folder created inside {path_dir}.")
+    if not os.path.isdir(os.path.join(path_dir, session_name)):
+        set_key(".env", "PROGRAM_SESSION", session_name)
+        os.mkdir(os.path.join(path_dir, session_name))
+        print(f"{session_name} session folder created inside {path_dir}.")
+    else:
+        if os.environ.get('PROGRAM_SESSION') != session_name:
+            set_key(".env", "PROGRAM_SESSION", session_name)
+            print(f"Current session changed: {os.environ.get('PROGRAM_SESSION')} --> {session_name}")
+        else:
+            print(f"Keeping program session name: {os.environ.get('PROGRAM_SESSION')}.")
 
 
-def create_session_name(str_len: int = 6) -> str:
+def create_session_name(str_len: int = 8) -> str:
         """
         Creates a randomly generated alphnumeric session name
 
@@ -242,6 +237,7 @@ def create_session_name(str_len: int = 6) -> str:
 
         return session_name
 
+
 def validate_ans(acceptable_ans: Union[list, set], question: str) -> str:
     """
     Keep asking for valid user input.
@@ -252,7 +248,7 @@ def validate_ans(acceptable_ans: Union[list, set], question: str) -> str:
     ans = input(question).lower().strip()
 
     while ans not in acceptable_ans:
-        ans = input(f"Only acceptable answers are: {list(acceptable_ans)}.\t" + question).lower().strip()
+        ans = input(f"Only acceptable answers are: {acceptable_ans}. " + question).lower().strip()
     
     return ans
 
@@ -298,7 +294,47 @@ def is_valid_windows_name(name) -> bool:
 
     return True
 
-    
+
+def check_dir(path_dir:str, session_name:str) -> str:
+    """
+    Check if folder already exist
+
+    - path_dir: path of folder
+    - session_name: name of session folder
+
+    Returns valid, unique folder name
+    """
+    validity_message = """
+    Your file name is invalid for windows file systen. You CANNOT have:
+        - special characters: <>:"/\\|?*
+        - trailing spaces or periods
+        - reserved Windows names (CON, PRN, AUX, NUL, COM1-COM9, LPT1-LPT9)
+    """
+
+    while os.path.isdir(os.path.join(path_dir, session_name)):
+        new_name = input(f"Folder named '{session_name}' already exists in storage folder. If you want to keep using {session_name}, confirm with '/keep', else, give a new session name. Note that session name will be saved in lowercase letters. Also, if left empty, session name will be randomly generated alphanumeric string and today's date (ex. 'as30k1mm_3-27-2025'): ")  
+
+        new_name = new_name.lower().strip()
+        if new_name == '/keep':
+            break
+        else:
+            if new_name == "":
+                new_name = create_session_name()
+            else:
+                acceptable_ans = {"yes", "y", "no", "n"}
+                add_date = validate_ans(acceptable_ans=acceptable_ans,
+                                        question="Add today's date at the end (y,n)? ")
+                    
+                if add_date in {"yes", "y"}:
+                    session_name = append_date(name=new_name)
+
+            while not is_valid_windows_name(new_name):
+                    new_name = input(validity_message + "\nGive a valid session name: ").lower().strip()
+            session_name = new_name
+        
+    return session_name
+
+
 
 def write_row_to_csv(data: Dict[str, Any], file_path: Optional[str] = "output.csv") -> None:
     """
