@@ -3,6 +3,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import declarative_base, Session, sessionmaker
 import os
+from dotenv import load_dotenv, set_key
 import csv
 from typing import Optional, Type, Any, Dict, List, Union
 import ast
@@ -153,13 +154,14 @@ def shutdown_protocol():
 # --------------------------
 # Folder/File Saving
 # --------------------------
-def name_program_session() -> str:
+def name_program_session() -> None:
     """
     Creates a folder with a program session name.
-
-    Returns a string if new program session folder is created, or keeping a previous one.
     """
     path_dir = './db/storage'
+
+    load_dotenv()
+
     session_name = os.environ.get('PROGRAM_SESSION')
 
     # TODO: review
@@ -170,46 +172,59 @@ def name_program_session() -> str:
     if session_name:
         acceptable_ans = {"yes", "y", "no", "n"}
         current_str = f"Your current program session name is: {session_name}. If you would like to keep the current session name, type yes (y). If not, type no (n): "
-        confirm = input(current_str)
 
-        ans = confirm.lower().strip()
-        while ans not in acceptable_ans:
-            confirm = input(f"Only acceptable answers are: {acceptable_ans}. " + current_str) 
+        ans = validate_ans(acceptable_ans=acceptable_ans,
+                           question=current_str)
 
         if ans in {"yes", "y"}:
-            return f"Keeping program session name: {session_name}."
-        else: # (no, n)
+            print(f"Keeping program session name: {session_name}.")
+            return
+        else: # {no, n}
             note_str = "Note that session name will be saved in lowercase letters. Also, if left empty, session name will be: number + randomly generated alphanumeric string and today's date (ex. '1_as30k1mm_3-27-2025'): "
 
             session_name = input("Create a session name (for file saving). " + note_str).lower().strip()
-
-            validity_message = """
-            Your file name is invalid for windows file systen. You CANNOT have:
-                - special characters: <>:"/\\|?*
-                - trailing spaces or periods
-                - reserved names (CON, PRN, AUX, NUL, COM1-COM9, LPT1-LPT9, etc.)
-            """
-            while not is_valid_windows_name(session_name):
-                session_name = session_name = input(validity_message + "\t Create a session name (for file saving). " + note_str).lower().strip()
             
-            while os.path.isdir(os.path.join(path_dir, session_name)):
-                new_name = input(f"Folder named '{session_name}' already exists in storage folder. If you want to keep using {session_name}, confirm with '/confirm', else, give a new session name. " + note_str)
+            if session_name == "":
+                session_name = create_session_name()
+                #TODO: check for duplicate folder
+            else:
+                add_date = validate_ans(acceptable_ans=acceptable_ans,
+                                    question="Add today's date at the end (y,n)? ")
                 
-                new_name = new_name.lower().strip()
-                if new_name == '/confirm':
-                    return f"Keeping program session name: {session_name}."
-                else:
-                    while not is_valid_windows_name(new_name):
-                        new_name = input(validity_message + "\t Give a valid session name: ").lower().strip()
-                    session_name = new_name
+                if add_date in {"yes", "y"}:
+                    append_date(name=session_name)
 
-            os.environ['FILE_NUM'] = 1
+                validity_message = """
+                Your file name is invalid for windows file systen. You CANNOT have:
+                    - special characters: <>:"/\\|?*
+                    - trailing spaces or periods
+                    - reserved names (CON, PRN, AUX, NUL, COM1-COM9, LPT1-LPT9, etc.)
+                """
+                while not is_valid_windows_name(session_name):
+                    session_name = input(validity_message + "\tCreate a session name (for file saving). " + note_str).lower().strip()
+                
+                #TODO: make it as function
+                while os.path.isdir(os.path.join(path_dir, session_name)):
+                    new_name = input(f"Folder named '{session_name}' already exists in storage folder. If you want to keep using {session_name}, confirm with '/confirm', else, give a new session name. " + note_str)
+                    
+                    new_name = new_name.lower().strip()
+                    if new_name == '/confirm':
+                        print(f"Keeping program session name: {session_name}.")
+                        return
+                    else:
+                        while not is_valid_windows_name(new_name):
+                            new_name = input(validity_message + "\tGive a valid session name: ").lower().strip()
+                        session_name = new_name
+            
+            set_key(".env", "FILE_NUM", "1")
     else:
         session_name = create_session_name()
+        #TODO: check for duplicate folder
 
-    os.environ['PROGRAM_SESSION'] = session_name
-    os.mkdir(session_name)
-    return f"{session_name} session folder created inside storage folder."
+    # os.environ['PROGRAM_SESSION'] = session_name
+    set_key(".env", "PROGRAM_SESSION", session_name)
+    os.mkdir(os.path.join(path_dir, session_name))
+    print(f"{session_name} session folder created inside {path_dir}.")
 
 
 def create_session_name(str_len: int = 6) -> str:
@@ -223,9 +238,40 @@ def create_session_name(str_len: int = 6) -> str:
         alphanum_chars = string.ascii_lowercase + string.digits
         today = datetime.today().strftime('%Y-%m-%d')
 
-        session_name = "".join(random.choices(alphanum_chars, k=str_len)) + today
+        session_name = "".join(random.choices(alphanum_chars, k=str_len)) + "_" + today
 
         return session_name
+
+def validate_ans(acceptable_ans: Union[list, set], question: str) -> str:
+    """
+    Keep asking for valid user input.
+
+    Returns valid user input
+    """
+
+    ans = input(question).lower().strip()
+
+    while ans not in acceptable_ans:
+        ans = input(f"Only acceptable answers are: {list(acceptable_ans)}.\t" + question).lower().strip()
+    
+    return ans
+
+def append_date(name: str, format: Optional[str]='%Y-%m-%d', date: Optional[str]=None) -> str:
+    """
+    Append date to end of name
+
+    - name: string that needs to have date appended at the end
+    - format: date/time format
+    - date: specific date to be appended. If not specified, it will default to today's datetime.
+
+    Returns name_timedate
+    """
+    if not date:
+        date = datetime.now() # date + time
+    
+    formatted_date = date.strftime(format)
+
+    return name + "_" + formatted_date
 
 
 def is_valid_windows_name(name) -> bool:
