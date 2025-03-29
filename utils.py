@@ -5,11 +5,13 @@ from sqlalchemy.orm import declarative_base, Session, sessionmaker
 import os
 from dotenv import load_dotenv, set_key
 import csv
+import pickle
 from typing import Optional, Type, Any, Dict, List, Union
 import ast
 import random
 import string
 from datetime import datetime
+from collections import defaultdict
 
 # --------------------------
 # SQLAlchemy
@@ -192,7 +194,7 @@ def name_program_session() -> None:
                     session_name = append_date(name=session_name)
 
                 validity_message = """
-                Your file name is invalid for windows file systen. You CANNOT have:
+                Your file name is invalid for windows file system. You CANNOT have:
                     - special characters: <>:"/\\|?*
                     - trailing spaces or periods
                     - reserved Windows names (CON, PRN, AUX, NUL, COM1-COM9, LPT1-LPT9)
@@ -202,17 +204,24 @@ def name_program_session() -> None:
 
                 session_name = check_dir(path_dir=path_dir,
                                          session_name=session_name)
-            
-            set_key(".env", "FILE_NUM", "1")
     else:
         session_name = create_session_name()
         # for some reason, there may be existing session folders while PROGRAM_SESSION=''
         session_name = check_dir(path_dir=path_dir,
                                  session_name=session_name)
 
-    if not os.path.isdir(os.path.join(path_dir, session_name)):
+    full_path = os.path.join(path_dir, session_name)
+    if not os.path.isdir(full_path):
         set_key(".env", "PROGRAM_SESSION", session_name)
         os.mkdir(os.path.join(path_dir, session_name))
+
+        # make pickle to keep track of file numbers
+        #TODO: replace with func
+        d = defaultdict(int)
+        pkl_name = "file_num.pkl"
+        with open(os.path.join(full_path, pkl_name), 'wb') as file:
+            pickle.dump(d, file)
+
         print(f"{session_name} session folder created inside {path_dir}.")
     else:
         if os.environ.get('PROGRAM_SESSION') != session_name:
@@ -220,6 +229,42 @@ def name_program_session() -> None:
             print(f"Current session changed: {os.environ.get('PROGRAM_SESSION')} --> {session_name}")
         else:
             print(f"Keeping program session name: {os.environ.get('PROGRAM_SESSION')}.")
+
+#TODO: finish this
+def create_pickle_file(dir_path:Optional[str]="/", filename:Optional[str]="pickle", data:Optional[Any]=None) -> None:
+    """
+    Create pickle file.
+
+    - dir_path: directory path
+    - filename: pickle file name
+    - data: data to save inside pkl   
+
+    """
+
+
+
+def check_filename(filename:str, correct_ext:str) -> str:
+    """
+    Correct file name
+
+    - filename: name of file (can include extension)
+    - correct_ext: correct extension
+
+    Returns corrected file name
+    """
+    filename, ext = os.path.splitext(filename.strip())
+
+    correct_ext = correct_ext.lower().strip()
+    if not correct_ext.startswith("."):
+        correct_ext = "." + correct_ext
+
+    if ext.lower() != correct_ext:
+        ext = correct_ext
+    
+    if is_valid_windows_name(filename):
+        return filename + ext
+    else:
+        raise ValueError("Invalid file name.")
 
 
 def create_session_name(str_len: int = 8) -> str:
@@ -337,58 +382,80 @@ def check_dir(path_dir:str, session_name:str) -> str:
 
 
 # TODO: get session folder?
-def write_row_to_csv(data: Dict[str, Any], file_path: Optional[str] = "output.csv") -> None:
+def write_row_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]],
+                     file_path: Optional[str] = "/", 
+                     file_name: Optional[str] = "output.csv",
+                     session_name: Optional[str] = None,
+                     add_date: Optional[bool] = True, 
+                     auto_increment: Optional[bool]=False) -> None:
     """
     Write dict of data to csv
 
     - data: row (dict) to be added
-    - file_path: name of output csv file
+    - file_path: path of csv file
+    - file_name: name of csv file
+    - session_name: program session name (in .env). If none, current one in .env file will be used.
+    - add_date: add date to file name or not. If session name is not provided and session name is empty inside .env, date will be added (False will be overriden).
+    - auto_increment: if file name already exists, append or create a new one. If True, it will create a new file with incremental number at the end. ex. If test_1.csv exists and auto_increment=True, then test_2.csv will be created. If auto_increment=True, it will append to test_1.csv.
     """
-    # if path doesn't have .csv
-    if not file_path.endswith(".csv"):
-         file_path += ".csv"
-
-    file_exists = False
-    if os.path.exists(file_path):
-        file_exists = True
+    load_dotenv()
     
-    # append data
-    fieldnames = data.keys()
-    with open(file_path, 'a', newline='', encoding='utf-8') as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+    if not session_name:
+        session_name = os.environ.get('PROGRAM_SESSION')
 
-        # if file doesn't exist, add header
-        if not file_exists:
-             writer.writeheader()
+        # unnamed session name will automatically get date appended
+        if session_name == "":
+            session_name = "unnamed_session"
+            add_date = True
 
-        writer.writerow(data) # singular
-
-# TODO: get session folder?
-def write_rows_to_csv(data: List[Dict[str, Any]], file_path: Optional[str] = "output.csv") -> None:
-    """
-    Write list of dict of data to csv
-
-    - data: list of rows (dict) to be added
-    - file_path: name of output csv file
-    """
-    # if path doesn't have .csv
-    if not file_path.endswith(".csv"):
-         file_path += ".csv"
-
-    file_exists = False
-    if os.path.exists(file_path):
-        file_exists = True
+    single_row = True
+    if isinstance(data, list):
+        single_row = False
     
+    file_name, ext = os.path.splitext(file_name)
+    if ext.lower() != ".csv":
+        ext = ".csv"
+
+    if add_date:
+        file_name = append_date(file_name)
+    
+    full_file_name = file_name + "_" + file_num + ext 
+    full_path = os.path.join(file_path, session_name, full_file_name)
+    
+
+    pkl_file_path
+    file_num_dict = 
+
+    new_file = True
+    while os.path.isfile(full_path):
+        if not auto_increment:
+            new_file = False
+            break
+        
+        file_num = int(file_num) + 1
+        set_key(".env", "FILE_NUM", str(file_num))
+
+        full_file_name = file_name + "_" + file_num + ext 
+        full_path = os.path.join(file_path, session_name, full_file_name)   
+
+    if single_row:
+        fieldnames = data.keys()
+    else:
+        fieldnames = data[0].keys()
+
+    #TODO
     # append data
-    fieldnames = data[0].keys()
-    with open(file_path, 'a', newline='', encoding='utf-8') as csvfile:
+    with open(full_path, 'a', newline='', encoding='utf-8') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
         # if file doesn't exist, add header
         if not file_exists:
             writer.writeheader()
 
-        writer.writerows(data) # multiple
+        if single_row:
+            writer.writerow(data) # singular
+        else:
+            writer.writerows(data) # multiple
 
 
 def csv_to_dict(file) -> list[dict]:
