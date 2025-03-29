@@ -384,15 +384,28 @@ def check_dir(path_dir:str, session_name:str) -> str:
         
     return session_name
 
+#TODO: implement this
+def write_to_csv_fast(data: Union[Dict[str, Any], List[Dict[str, Any]]],
+                      file_path: Optional[str] = "./db/storage", 
+                      file_name: Optional[str] = "output.csv",
+                      session_name: Optional[str] = None,
+                      add_date: Optional[bool] = False) -> None:
+    """
+    Write (list of) data to csv. Unlike write_to_csv, you must be extra careful in passing parameters. However, it is faster because it's simpler.
+    """
+
+
 
 def write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]],
                  file_path: Optional[str] = "./db/storage", 
                  file_name: Optional[str] = "output.csv",
                  session_name: Optional[str] = None,
-                 add_date: Optional[bool] = True, 
+                 add_date: Optional[bool] = False, 
                  auto_increment: Optional[bool]=False) -> None:
     """
-    Write dict of data to csv
+    Write (list of) data to csv. Based on the parameters, it will try to automate file naming and add data accordingly. 
+    ex. If example_1.csv file exists, example_2.csv will be made if auto_increment=True. If auto_increment=False, it will data append to example_1.csv. 
+    Slower than write_to_csv_fast due to a lot of condition checking.
 
     - data: row (dict) to be added
     - file_path: path to save csv file
@@ -410,16 +423,12 @@ def write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]],
         if session_name == "":
             session_name = "unnamed_session"
             unnamed_path = os.path.join(file_path, session_name)
-            print(unnamed_path)
             if not os.path.isdir(unnamed_path):
                 os.mkdir(unnamed_path)
             add_date = True
     
     if not os.path.isdir(os.path.join(file_path, session_name)):
-        raise FileNotFoundError(f"Program session folder ({os.path.join(file_path, session_name)}) does not exist.")
-
-
-    #TODO
+        raise FileNotFoundError(f"Program session folder ({os.path.join(file_path, session_name)}) does not exist. Create a session folder at {file_path}")
 
     single_row = True
     if isinstance(data, list):
@@ -433,9 +442,10 @@ def write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]],
     if add_date:
         date_pattern = r'\d{4}-\d{2}-\d{2}'
         match = re.search(date_pattern, file_name)
+        add_date = False
         if not match:
             file_name = append_date(file_name)
-    
+
     pkl_name = "file_num.pkl"
     pkl_file_path = os.path.join(file_path, session_name, pkl_name)
     pickle_data = dict()
@@ -448,8 +458,12 @@ def write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]],
                 file_num = pickle_data[os.path.join(session_name, file_name)]
     
 
-    #TODO: if the file_name exists, then use that instead of creating new one
-    full_file_name = file_name + "_" + str(file_num) + ext
+    full_file_name = None
+    if os.path.isfile(os.path.join(file_path, session_name, file_name + ext)) and not add_date and not auto_increment:
+        full_file_name = file_name + ext
+    else:
+        full_file_name = file_name + "_" + str(file_num) + ext
+
     full_path = os.path.join(file_path, session_name, full_file_name)
     new_file = True
     # only increment file number. Don't try to fill the gap in.
@@ -464,10 +478,9 @@ def write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]],
         full_file_name = file_name + "_" + str(file_num) + ext 
         full_path = os.path.join(file_path, session_name, full_file_name)
 
-    print(file_num)
+
     pickle_data[os.path.join(session_name, file_name)] = file_num
-    print(pickle_data)
-    print(pkl_file_path)
+
     with open(pkl_file_path, "wb") as file:
         pickle.dump(pickle_data, file)
 
