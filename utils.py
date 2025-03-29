@@ -385,7 +385,6 @@ def check_dir(path_dir:str, session_name:str) -> str:
     return session_name
 
 
-# TODO: get session folder?
 def write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]],
                  file_path: Optional[str] = "./db/storage", 
                  file_name: Optional[str] = "output.csv",
@@ -397,7 +396,7 @@ def write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]],
 
     - data: row (dict) to be added
     - file_path: path to save csv file
-    - file_name: name of csv file
+    - file_name: name of csv file. Avoid typing date. Use add_date parametere instead if creating new. If adding date manually, use this format: "YYYY-MM-DD" and append it at the end using "_".
     - session_name: EXISITNG program session name (in .env). If none, current one in .env file will be used. 
     - add_date: add date to file name or not. If session name is not provided and session name is empty inside .env, date will be added (False will be overriden).
     - auto_increment: if file name already exists, append or create a new one. If True, it will create a new file with incremental number at the end. ex. If test_1.csv exists and auto_increment=True, then test_2.csv will be created. If auto_increment=True, it will append to test_1.csv.
@@ -419,6 +418,9 @@ def write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]],
     if not os.path.isdir(os.path.join(file_path, session_name)):
         raise FileNotFoundError(f"Program session folder ({os.path.join(file_path, session_name)}) does not exist.")
 
+
+    #TODO
+
     single_row = True
     if isinstance(data, list):
         single_row = False
@@ -428,13 +430,12 @@ def write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]],
         ext = ".csv"
 
     file_num = 1
-    # TODO: need to fix not adding date when there's already one
-    # !!!!
     if add_date:
-        date_pattern = r'\b\d{4}-\d{2}-\d{2}\b' # YYYY-MM-DD
-        if not re.search(date_pattern, file_name):
+        date_pattern = r'\d{4}-\d{2}-\d{2}'
+        match = re.search(date_pattern, file_name)
+        if not match:
             file_name = append_date(file_name)
-
+    
     pkl_name = "file_num.pkl"
     pkl_file_path = os.path.join(file_path, session_name, pkl_name)
     pickle_data = dict()
@@ -446,6 +447,8 @@ def write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]],
             if os.path.join(session_name, file_name) in pickle_data:
                 file_num = pickle_data[os.path.join(session_name, file_name)]
     
+
+    #TODO: if the file_name exists, then use that instead of creating new one
     full_file_name = file_name + "_" + str(file_num) + ext
     full_path = os.path.join(file_path, session_name, full_file_name)
     new_file = True
@@ -473,7 +476,7 @@ def write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]],
     else:
         fieldnames = data[0].keys()
 
-    #TODO
+
     # append data
     with open(full_path, 'a', newline='', encoding='utf-8') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
