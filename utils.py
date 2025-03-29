@@ -405,6 +405,7 @@ def write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]],
     """
     Write (list of) data to csv. Based on the parameters, it will try to automate file naming and add data accordingly. 
     ex. If example_1.csv file exists, example_2.csv will be made if auto_increment=True. If auto_increment=False, it will data append to example_1.csv. 
+    HIGHLY RECOMMEND this format if providing date and file numbering manually: filename_YYYY-MM-DD_filenum 
     Slower than write_to_csv_fast due to a lot of condition checking.
 
     - data: row (dict) to be added
@@ -435,27 +436,37 @@ def write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]],
         single_row = False
     
     file_name, ext = os.path.splitext(file_name)
-    if ext.lower() != ".csv":
+    if ext != ".csv":
         ext = ".csv"
 
-    file_num = 1
     if add_date:
         date_pattern = r'\d{4}-\d{2}-\d{2}'
         match = re.search(date_pattern, file_name)
-        add_date = False
-        if not match:
+        if match:
+            add_date = False
+        else:
             file_name = append_date(file_name)
+
+
+    file_num = 1
+    num_pattern = r'_([0-9]+)$'
+    match = re.search(num_pattern, file_name)
+    if match:
+        file_num = int(match.group(1)) 
+        file_name = file_name[:-len(match.group())]
 
     pkl_name = "file_num.pkl"
     pkl_file_path = os.path.join(file_path, session_name, pkl_name)
     pickle_data = dict()
     
-    # If the session folder has no pickle file but has .csv files, pickle file created at this point will not know about these csv files. So, the csv files may be overwritten.
-    if os.path.isfile(pkl_file_path):
-        with open(pkl_file_path, "rb") as file:
-            pickle_data = pickle.load(file) # dict {file_path: file_num}
-            if os.path.join(session_name, file_name) in pickle_data:
-                file_num = pickle_data[os.path.join(session_name, file_name)]
+    if auto_increment:
+        if not match:
+            # If the session folder has no pickle file but has .csv files, pickle file created at this point will not know about these csv files. So, the csv files may be overwritten.
+            if os.path.isfile(pkl_file_path):
+                with open(pkl_file_path, "rb") as file:
+                    pickle_data = pickle.load(file) # dict {file_path: file_num}
+                    if os.path.join(session_name, file_name) in pickle_data:
+                        file_num = pickle_data[os.path.join(session_name, file_name)]
     
 
     full_file_name = None
@@ -477,7 +488,6 @@ def write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]],
 
         full_file_name = file_name + "_" + str(file_num) + ext 
         full_path = os.path.join(file_path, session_name, full_file_name)
-
 
     pickle_data[os.path.join(session_name, file_name)] = file_num
 
@@ -502,6 +512,9 @@ def write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]],
             writer.writerow(data) # singular
         else:
             writer.writerows(data) # multiple
+    
+    if new_file:
+        print(f"File created with at {full_path}. Name may be different from what you put in for file_name parameter due to how you've set the add_date and auto_increment parameters.")
 
 
 def csv_to_dict(file) -> list[dict]:
