@@ -17,7 +17,7 @@ import re
 # SQLAlchemy
 # --------------------------
 
-def make_pgdb(password: str, db: str, user: Optional[str]="postgres", host: Optional[str]="localhost", port: Optional[int]=5432, add_vectors: Optional[bool]=False):
+def make_pgdb(password: str, db: str, user: str="postgres", host: str="localhost", port: int=5432, add_vectors: bool=False):
     """
     If database doesn't exist, create one.
     Reference: Connect to PostgreSQL Using SQLAlchemy & Python (https://www.youtube.com/watch?v=neW9Y9xh4jc)
@@ -93,7 +93,6 @@ def add_row(table: Type[Base], session: Session, info: Dict[str, Any], file_path
 
 
 #TODO
-import numpy as np
 def query_vector(query: List[Union[int, float]], db_url: str, search_list_size: int=100, rescore: int=50,  top_k: int=5) -> List[Dict]:
     """
     Use streamingDiskAnn to get relevant queries from short-term long-term memory (temporary db)
@@ -156,7 +155,7 @@ def shutdown_protocol():
 # --------------------------
 # Folder/File Saving
 # --------------------------
-def name_program_session() -> None:
+def create_program_session_dir() -> None:
     """
     Creates a folder with a program session name.
     """
@@ -229,7 +228,7 @@ def name_program_session() -> None:
             print(f"Keeping program session name: {os.environ.get('PROGRAM_SESSION')}.")
 
 
-def create_pickle_file(dir_path:Optional[str]="/", filename:Optional[str]="pickle", data:Optional[dict]={}) -> None:
+def create_pickle_file(dir_path:str="/", filename:str="pickle", data:dict={}) -> None:
     """
     Create pickle file.
 
@@ -238,7 +237,10 @@ def create_pickle_file(dir_path:Optional[str]="/", filename:Optional[str]="pickl
     - data: data to save inside pkl   
 
     """
-    filename = check_filename(filename, ".pkl")
+    try:
+        filename = check_filename(filename, ".pkl")
+    except Exception as e:
+        print(f"{e} Unable to create pickle file.")
 
     with open(os.path.join(dir_path, filename), 'wb') as file:
         pickle.dump(data, file)
@@ -246,12 +248,12 @@ def create_pickle_file(dir_path:Optional[str]="/", filename:Optional[str]="pickl
 
 def check_filename(filename:str, correct_ext:str) -> str:
     """
-    Correct file name
+    Checks if file name is valid.
 
     - filename: name of file (can include extension)
     - correct_ext: correct extension (assumes the correct extension name has been passed)
 
-    Returns corrected file name
+    Returns checked filename or invalid message.
     """
     filename, ext = os.path.splitext(filename.strip())
 
@@ -288,6 +290,9 @@ def validate_ans(acceptable_ans: Union[list, set], question: str) -> str:
     """
     Keep asking for valid user input.
 
+    - acceptable_ans: list/set of acceptable anser choices
+    - question: question for user 
+
     Returns valid user input
     """
 
@@ -299,7 +304,7 @@ def validate_ans(acceptable_ans: Union[list, set], question: str) -> str:
     return ans
 
 
-def append_date(name: str, format: Optional[str]='%Y-%m-%d', date: Optional[str]=None) -> str:
+def append_date(name: str, format: str='%Y-%m-%d', date: str=None) -> str:
     """
     Append date to end of name
 
@@ -384,36 +389,91 @@ def check_dir(path_dir:str, session_name:str) -> str:
         
     return session_name
 
-#TODO: implement this
-def write_to_csv_fast(data: Union[Dict[str, Any], List[Dict[str, Any]]],
-                      file_path: Optional[str] = "./db/storage", 
-                      file_name: Optional[str] = "output.csv",
-                      session_name: Optional[str] = None,
-                      add_date: Optional[bool] = False) -> None:
+
+def write_to_csv(full_file_path: str, 
+                 data: Union[Dict[str, Any], List[Dict[str, Any]]]) -> None:
     """
-    Write (list of) data to csv. Unlike write_to_csv, you must be extra careful in passing parameters. However, it is faster because it's simpler.
+    Write (list of) data dict to csv.
+
+    - full_file_path: full file path. Note that csv file doesn't need to exist, but folder(s) must exist.
+    - data: (list of) dict to be added
     """
 
+    if not full_file_path.endswith(".csv"):
+        full_file_path += ".csv"
+    
+    single_row = True
+    if isinstance(data, list):
+        single_row = False
+    
+
+    no_data = False
+    file_exists = os.path.isfile(full_file_path)
+
+    if single_row:
+        no_data = not data
+    else:
+        no_data = not data[0] # assumes only based on first data (for speed). Use any() or all() for more accurcy
+        
+
+    if no_data and not file_exists:
+        # create empty file
+        with open(full_file_path, 'w', newline='', encoding='utf-8') as f:
+            pass
+        return
+    elif no_data and file_exists:
+        return
 
 
-def write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]],
-                 file_path: Optional[str] = "./db/storage", 
-                 file_name: Optional[str] = "output.csv",
-                 session_name: Optional[str] = None,
-                 add_date: Optional[bool] = False, 
-                 auto_increment: Optional[bool]=False) -> None:
+    # Only reads first line for header
+    has_header = False
+    if file_exists:
+        with open(full_file_path, "r", newline='', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            header = next(reader, None)
+            if header:
+                has_header = True
+
+
+    if single_row:
+        fieldnames = data.keys()
+    else:
+        fieldnames = data[0].keys()
+
+    # append data
+    with open(full_file_path, 'a', newline='', encoding='utf-8') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+        # if file doesn't have header, add header
+        if not has_header:
+            writer.writeheader()
+
+        if single_row:
+            writer.writerow(data) # singular
+        else:
+            writer.writerows(data) # multiple
+
+
+def name_and_write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]] = {},
+                    file_path: str = "./db/storage",
+                    file_name: str = "output.csv",
+                    session_name: Optional[str] = None,
+                    add_date: bool = False, 
+                    auto_increment: bool = False) -> str:
     """
-    Write (list of) data to csv. Based on the parameters, it will try to automate file naming and add data accordingly. 
+    Creates csv file. Based on the parameters, it will try to automate file naming and add data accordingly. 
     ex. If example_1.csv file exists, example_2.csv will be made if auto_increment=True. If auto_increment=False, it will data append to example_1.csv. 
+    Note that if it cannot find directory, it will create a folder. Moreover, by default, to keep track of file numbering, pickle file will be created for each directory.
     HIGHLY RECOMMEND this format if providing date and file numbering manually: filename_YYYY-MM-DD_filenum 
-    Slower than write_to_csv_fast due to a lot of condition checking.
 
-    - data: row (dict) to be added
+    - data: (list of) data dict to add
     - file_path: path to save csv file
     - file_name: name of csv file. Avoid typing date. Use add_date parametere instead if creating new. If adding date manually, use this format: "YYYY-MM-DD" and append it at the end using "_".
     - session_name: EXISITNG program session name (in .env). If none, current one in .env file will be used. 
     - add_date: add date to file name or not. If session name is not provided and session name is empty inside .env, date will be added (False will be overriden).
     - auto_increment: if file name already exists, append or create a new one. If True, it will create a new file with incremental number at the end. ex. If test_1.csv exists and auto_increment=True, then test_2.csv will be created. If auto_increment=True, it will append to test_1.csv.
+
+    Returns full path of created file.
     """
     load_dotenv()
     
@@ -431,9 +491,7 @@ def write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]],
     if not os.path.isdir(os.path.join(file_path, session_name)):
         raise FileNotFoundError(f"Program session folder ({os.path.join(file_path, session_name)}) does not exist. Create a session folder at {file_path}")
 
-    single_row = True
-    if isinstance(data, list):
-        single_row = False
+    file_name = check_filename(file_name, ".csv")
     
     file_name, ext = os.path.splitext(file_name)
     if ext != ".csv":
@@ -459,14 +517,16 @@ def write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]],
     pkl_file_path = os.path.join(file_path, session_name, pkl_name)
     pickle_data = dict()
     
-    if auto_increment:
-        if not match:
-            # If the session folder has no pickle file but has .csv files, pickle file created at this point will not know about these csv files. So, the csv files may be overwritten.
-            if os.path.isfile(pkl_file_path):
-                with open(pkl_file_path, "rb") as file:
-                    pickle_data = pickle.load(file) # dict {file_path: file_num}
-                    if os.path.join(session_name, file_name) in pickle_data:
-                        file_num = pickle_data[os.path.join(session_name, file_name)]
+    
+    if not match:
+        # If the session folder has no pickle file but has .csv files, pickle file created at this point will not know about these csv files. So, the csv files may be overwritten.
+        if os.path.isfile(pkl_file_path):
+            with open(pkl_file_path, "rb") as file:
+                pickle_data = pickle.load(file) # dict {file_path: file_num}
+                pickle_name = os.path.join(session_name, file_name+ext)
+                if pickle_name in pickle_data:
+                    file_num = pickle_data[pickle_name]
+                    print("TEST:", file_num)
     
 
     full_file_name = None
@@ -476,12 +536,10 @@ def write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]],
         full_file_name = file_name + "_" + str(file_num) + ext
 
     full_path = os.path.join(file_path, session_name, full_file_name)
-    new_file = True
     # only increment file number. Don't try to fill the gap in.
     while os.path.isfile(full_path):
         if not auto_increment:
-            new_file = False
-            print(f"Appending data to existing file at {full_path}")
+            print(f"Using existing file at {full_path}")
             break
  
         file_num += 1
@@ -489,33 +547,20 @@ def write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]],
         full_file_name = file_name + "_" + str(file_num) + ext 
         full_path = os.path.join(file_path, session_name, full_file_name)
 
-    pickle_data[os.path.join(session_name, file_name)] = file_num
+    pickle_data[os.path.join(session_name, file_name+ext)] = file_num
+
+    print(pickle_data)
 
     with open(pkl_file_path, "wb") as file:
         pickle.dump(pickle_data, file)
 
-    if single_row:
-        fieldnames = data.keys()
-    else:
-        fieldnames = data[0].keys()
+    write_to_csv(full_file_path=full_path,
+                 data=data)
 
+    return full_path
 
-    # append data
-    with open(full_path, 'a', newline='', encoding='utf-8') as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-
-        # if file doesn't exist, add header
-        if new_file:
-            writer.writeheader()
-
-        if single_row:
-            writer.writerow(data) # singular
-        else:
-            writer.writerows(data) # multiple
-    
-    if new_file:
-        print(f"File created with at {full_path}. Name may be different from what you put in for file_name parameter due to how you've set the add_date and auto_increment parameters.")
-
+#TODO: create pickle file verification check
+# TODO: if pickle file for some reason gets deleted (and csv still in folder), need to recreate pickle file
 
 def csv_to_dict(file) -> list[dict]:
     """

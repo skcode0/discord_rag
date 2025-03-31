@@ -1,5 +1,5 @@
 import os
-from utils import make_pgdb
+from utils import make_pgdb, create_program_session_dir, write_to_csv, validate_ans
 from sqlalchemy import create_engine, Index
 from sqlalchemy.orm import DeclarativeBase, sessionmaker, mapped_column, Mapped
 from pgvector.sqlalchemy import Vector
@@ -7,6 +7,8 @@ from datetime import datetime
 import subprocess
 import discord
 from discord.ext import commands
+from dotenv import load_dotenv
+import sys
 
 # --------------------------
 # start Docker Compose command for DBs
@@ -18,19 +20,45 @@ try:
     print("Docker Compose Output:\n", result.stdout)
 except subprocess.CalledProcessError as e:
     print("Error running docker-compose:", e.stderr)
+    sys.exit(1)
 
 # --------------------------
 # Load in environment variables
 # --------------------------
+# postgres
+load_dotenv()
 pg_username = os.environ.get('POSTGRESS_USER')
 pg_password = os.environ.get('POSTGRES_PASSWORD')
 short_db_name = os.environ.get('SHORT_TERM_DB')
 short_port = os.environ.get('SHORT_TERM_HOST_PORT')
 long_db_name = os.environ.get('LONG_TERM_DB')
 long_port = os.environ.get('LONG_TERM_HOST_PORT')
+
+# discord
 discord_token = os.environ.get('DISCORD_TOKEN')
+
+# embedding model
 embedding_dim = int(os.environ.get('EMBEDDING_DIM'))
 embedding_model = os.environ.get('EMBEDDING_MODEL')
+
+# program session folder
+program_session = os.environ.get('PROGRAM_SESSION')
+
+
+# --------------------------
+# For .csv data storage
+# --------------------------
+create_program_session_dir() # create session folder
+
+storage_path = './db/storage'
+
+# for rows that were not sucessfully added to db for some reason (ex. duplicates, inserting null in non-nullable column, etc.)
+not_added_file_name = "rows_not_added.csv"
+# for recording all data
+all_file_name = "records.csv"
+
+input()
+
 
 # --------------------------
 # Create database (+ postgres extensions) and table if not present
@@ -70,18 +98,6 @@ class Vectors(Base):
     )
 
 Base.metadata.create_all(engine) # prevents duplicate tables
-
-
-# --------------------------
-# For .csv data storage
-# --------------------------
-today = datetime.today().strftime('%Y_%m_%d')
-# for rows that were not sucessfully added to db for some reason (ex. duplicates, inserting null in non-nullable column, etc.)
-storage_path = 'db/storage'
-not_added_path = storage_path + f"rows_not_added_{today}.csv" 
-# for storing all csv data
-path = storage_path + f"{today}"
-
 
 # --------------------------
 # Store Discord messages as embeddings (+ csv files) and call llm with rag to answer user inputs
