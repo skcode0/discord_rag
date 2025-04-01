@@ -3,6 +3,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import declarative_base, Session, sessionmaker
 import os
+from pathlib import Path
 from dotenv import load_dotenv, set_key
 import csv
 import pickle
@@ -61,21 +62,21 @@ def enable_vectors(url: str) -> None:
 
 
 Base = declarative_base()
-def add_row(table: Type[Base], session: Session, info: Dict[str, Any], file_path: Optional[str] = None) -> None:
+def add_row(table: Type[Base], session: Session, data: Dict[str, Any], file_path: Optional[str] = None) -> None:
     """
     Add record.
 
     - table: table to add row
     - session: pg session
-    - info: row data
+    - data: row data
     - file_path: csv file
 
     """
     # TODO: spread these and add dynamically
-    time_spoken = info['time']
-    speaker = info['speaker']
-    text = info['text']
-    embedding = info['embedding']
+    time_spoken = data['time']
+    speaker = data['speaker']
+    text = data['text']
+    embedding = data['embedding']
 
     try:
         session.add(table(time_spoken=time_spoken,
@@ -87,7 +88,9 @@ def add_row(table: Type[Base], session: Session, info: Dict[str, Any], file_path
         session.rollback()
 
         # put failed to add record in text file for later
-        write_row_to_csv(info, file_path)
+        #TODO: get full path, not just file path
+        #TODO: get env var, or pass in env var (program session)
+        write_to_csv(data=data, full_file_path=file_path)
 
         print(f"Error adding record. Non-added record is stored inside {file_path}.")
 
@@ -526,7 +529,6 @@ def name_and_write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]] = {}
                 pickle_name = os.path.join(session_name, file_name+ext)
                 if pickle_name in pickle_data:
                     file_num = pickle_data[pickle_name]
-                    print("TEST:", file_num)
     
 
     full_file_name = None
@@ -549,8 +551,6 @@ def name_and_write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]] = {}
 
     pickle_data[os.path.join(session_name, file_name+ext)] = file_num
 
-    print(pickle_data)
-
     with open(pkl_file_path, "wb") as file:
         pickle.dump(pickle_data, file)
 
@@ -559,9 +559,60 @@ def name_and_write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]] = {}
 
     return full_path
 
-#TODO: create pickle file verification check
-# TODO: if pickle file for some reason gets deleted (and csv still in folder), need to recreate pickle file
 
+def update_file_num_pkl(dir_path: str = './',
+                        delimiter: str = "_") -> str:
+    """
+    Check and update file numbering stored in pickle.
+    Useful when file(s)/folder(s) or pickle deleted and need update/reconstruction.
+    HIGHLY RECOMMEND files have this format: {file_name}_{date}_{file_num}
+    File number MUST be at the end.
+
+    - dir_path: directory to check.
+    - delimiter: character used to separate sections (filename, date, file numbering, etc.)
+    """
+    fs = [f for f in os.listdir(dir_path) if os.path.isfile(os.path.join(dir_path, f))]
+
+    not_added = []
+
+    d = dict()
+    for f in fs:
+        base, ext = os.path.splitext(f)
+        
+        # TODO: only split on said delimiter nothing more. ex. '_' (split) vs '__' (don't split)
+        # checks if there's name and file_num
+        # ex. folder 'example' when split will not have file_num
+        try:
+            file_name, file_num = base.rsplit(delimiter, 1)
+            # any decimal numbers (ex. 3.1) will be turned to int
+            file_num = int(file_num)
+        except:
+            file_name = base
+            not_added.append(f)
+            continue
+            
+
+        path_f = Path(rf"{f}")
+        direct_parent = path_f.parent.name
+
+        d_name = os.path.join(direct_parent, file_name+ext)
+        if d_name not in d:
+            d[d_name] = 1
+        else:
+            d[d_name] = file_num
+    
+    pkl_name = "file_num.pkl"
+    pkl_file_path = os.path.join(dir_path, pkl_name)
+    # will replace if there's already a file with same name
+    with open(pkl_file_path, "wb") as file:
+        pickle.dump(d, file)
+    
+    print(f"file numbering updated at {pkl_file_path}. {f"These files are not added: {not_added}" if not_added else ""}")
+
+    return pkl_file_path
+        
+
+# TODO: check
 def csv_to_dict(file) -> list[dict]:
     """
     Read csv file
