@@ -579,7 +579,6 @@ def update_file_num_pkl(dir_path: str = './',
     for f in fs:
         base, ext = os.path.splitext(f)
         
-        # TODO: only split on said delimiter nothing more. ex. '_' (split) vs '__' (don't split)
         # checks if there's name and file_num
         # ex. folder 'example' when split will not have file_num
         try:
