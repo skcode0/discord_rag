@@ -13,6 +13,8 @@ import random
 import string
 from datetime import datetime
 import re
+import pandas as pd
+import numpy as np
 
 # --------------------------
 # SQLAlchemy
@@ -611,32 +613,38 @@ def update_file_num_pkl(dir_path: str = './',
     return pkl_file_path
         
 
-# TODO: check
-def csv_to_dict(file) -> list[dict]:
+def csv_to_pd(filepath) -> pd.DataFrame:
     """
-    Read csv file
+    Return csv as pandas dataframe
 
-    - file: csv file name
+    - filepath: full csv file path
 
-    Returns list of dict
+    Returns pandas dataframe
     """
-    if not file.endswith(".csv"):
-         file += ".csv"
+    if not filepath.endswith(".csv"):
+         filepath += ".csv"
 
-    with open(file, newline='', encoding='utf-8') as csvfile:
-        reader = csv.DictReader(csvfile)
+    df = pd.read_csv(filepath)
+
+    return df
+
+def str_to_vec(s: str) -> np.array:
+    """
+    Convert to vector (numpy array)
+
+    - s: string version of vectors
     
-        data = []
-        for row in reader:
-            for k,v in row.items():
-                try: 
-                    row[k] = ast.literal_eval(v) # convert text back to actual data type
-                except (ValueError, SyntaxError):
-                    pass # keep as string if conversion fails
-        data.append(row)
+    Returns numpy array vector
+    """
+    clean = s.strip("[]")
 
-    return data
+    return np.fromstring(clean, sep=",")
 
-#TODO: make another function for csv_to_pandas
+
 #TODO pandas --> postgres 
+def pd_to_postgres():
+    """
+    
+    """
+
 
