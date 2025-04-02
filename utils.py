@@ -1,13 +1,13 @@
 from sqlalchemy_utils import database_exists, create_database
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import declarative_base, Session, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 import os
 from pathlib import Path
 from dotenv import load_dotenv, set_key
 import csv
 import pickle
-from typing import Optional, Type, Any, Dict, List, Union
+from typing import Optional, Type, Any, Dict, List, Union, TypeVar
 import ast
 import random
 import string
@@ -19,7 +19,6 @@ import numpy as np
 # --------------------------
 # SQLAlchemy
 # --------------------------
-
 def make_pgdb(password: str, db: str, user: str="postgres", host: str="localhost", port: int=5432, add_vectors: bool=False):
     """
     If database doesn't exist, create one.
@@ -56,51 +55,47 @@ def enable_vectors(url: str) -> None:
 
             - url: postgres db url
         """
-        engine = create_engine(url)
+        #TODO: get rid of engine
+        engine = create_engine(url, echo=False)
         with Session(engine) as session: # will auto close
             session.execute(text("CREATE EXTENSION IF NOT EXISTS vectorscale CASCADE;")) # CASCADE will automatically install pgvector
             session.commit()
         print("Vectorscale enabled.")
 
 
-Base = declarative_base()
-def add_row(table: Type[Base], session: Session, data: Dict[str, Any], file_path: Optional[str] = None) -> None:
-    """
-    Add record.
+class Base(DeclarativeBase):
+    pass
 
-    - table: table to add row
-    - session: pg session
-    - data: row data
-    - file_path: csv file
-
+# TODO: don't pass in session as param. create session here and close
+def add_record(table: Type[Base], 
+            session: Session, 
+            data: Dict[str, Any]) -> None:
     """
-    # TODO: spread these and add dynamically
-    time_spoken = data['time']
-    speaker = data['speaker']
-    text = data['text']
-    embedding = data['embedding']
+    Add record. If record could not be added, it will raise error. 
+
+    - table: table to add record
+    - session: SQLAlchemy session
+    - data: record data. If the data dict's keys don't have the same name as the table name or there's more keys than column names, it will raise error. If there are less keys than columns, then depending on whether the column is nullable or not, it will add null or raise (IntegrityError) error.
+    
+    """
+    IntegrityError
 
     try:
-        session.add(table(time_spoken=time_spoken,
-                            speaker=speaker,
-                            text=text,
-                            embedding=embedding))
+        session.add(table(**data))
         session.commit()
-    except IntegrityError:
+    except Exception as e:
         session.rollback()
-
-        # put failed to add record in text file for later
-        #TODO: get full path, not just file path
-        #TODO: get env var, or pass in env var (program session)
-        write_to_csv(data=data, full_file_path=file_path)
-
-        print(f"Error adding record. Non-added record is stored inside {file_path}.")
+        raise e
 
 
-#TODO
-def query_vector(query: List[Union[int, float]], db_url: str, search_list_size: int=100, rescore: int=50,  top_k: int=5) -> List[Dict]:
+#TODO ------------------------------
+def query_vector(query: List[Union[int, float]], 
+                 db_url: str, 
+                 search_list_size: int=100, 
+                 rescore: int=50, 
+                 top_k: int=5) -> List[Dict]:
     """
-    Use streamingDiskAnn to get relevant queries from short-term long-term memory (temporary db)
+    Use streamingDiskAnn and cosine distance to get the most relevant query answers.
 
     - query: vectorized query input
     - db_url: url to postgres database
@@ -109,14 +104,15 @@ def query_vector(query: List[Union[int, float]], db_url: str, search_list_size: 
     - top_k: get top k results
     """
     engine = create_engine(db_url) 
-    Session = sessionmaker(bind=engine) #todo: need to do something about this session so that it doesn't affect the main session
-    session = Session()
+    Session = sessionmaker(bind=engine)
+    query_session = Session()
 
     # https://github.com/timescale/pgvectorscale/blob/main/README.md?utm_source=chatgpt.com
-    session.execute(text(f"SET diskann.query_search_list_size = {search_list_size}"))
-    session.execute(text(f"SET diskann.query_rescore = {rescore}")) 
+    query_session.execute(text(f"SET diskann.query_search_list_size = {search_list_size}"))
+    query_session.execute(text(f"SET diskann.query_rescore = {rescore}")) 
 
-    # <=> = cosine DISTANCE (1 - cosine similarity); lower the distance, the better
+    # <=> is cosine DISTANCE (1 - cosine similarity); lower the distance, the better
+    # Note: pgvectorscale currently supports: cosine distance (<=>) queries, for indices created with vector_cosine_ops; L2 distance (<->) queries, for indices created with vector_l2_ops; and inner product (<#>) queries, for indices created with vector_ip_ops. This is the same syntax used by pgvector.
     sql = text("""
                 WITH relaxed_results AS MATERIALIZED (
                 SELECT 
@@ -136,12 +132,12 @@ def query_vector(query: List[Union[int, float]], db_url: str, search_list_size: 
         'limit': top_k
     }
 
-    result = session.execute(sql, params)
+    result = query_session.execute(sql, params)
     rows = result.fetchall()
 
     columns = result.keys()
     
-    session.close()
+    query_session.close()
     return [dict(zip(columns, row)) for row in rows]
 
 # TODO
@@ -642,9 +638,11 @@ def str_to_vec(s: str) -> np.array:
 
 
 #TODO pandas --> postgres 
-def pd_to_postgres():
+def pd_to_postgres(pd: pd.DataFrame) -> None:
+    """
+    Send pandas dataframe to postgres for storage.
+
+    - pd: pandas dataframe
     """
     
-    """
-
 

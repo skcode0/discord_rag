@@ -1,5 +1,5 @@
 import os
-from utils import make_pgdb, create_program_session_dir, write_to_csv, validate_ans
+from utils import make_pgdb, create_program_session_dir, name_and_write_to_csv, validate_ans
 from sqlalchemy import create_engine, Index
 from sqlalchemy.orm import DeclarativeBase, sessionmaker, mapped_column, Mapped
 from pgvector.sqlalchemy import Vector
@@ -53,16 +53,37 @@ create_program_session_dir() # create session folder
 storage_path = './db/storage'
 
 # for rows that were not sucessfully added to db for some reason (ex. duplicates, inserting null in non-nullable column, etc.)
-not_added_file_name = "rows_not_added.csv"
+not_added_file_name = "not_added.csv"
 # for recording all data
-all_file_name = "records.csv"
+all_file_name = "output.csv"
 
-input()
+acceptable_ans = ["yes", "y", "no", "n"]
+print("Following questions are for writing non-postgres-added data to csv.")
+add_date = validate_ans(acceptable_ans=acceptable_ans,
+                        question="Add date? Default is True. (y/n):")
+auto_increment = input(acceptable_ans=acceptable_ans,
+                       question="Add auto increment for file numbering? Default is False (y/n): ")
+not_added_csv_path = name_and_write_to_csv(file_path=storage_path,
+                                  session_name=program_session,
+                                  add_date = True,
+                                  auto_increment=False)
 
+print("----------")
+print("Following questions are for writing all data to csv.")
+add_date = validate_ans(acceptable_ans=acceptable_ans,
+                        question="Add date? Default is True. (y/n):")
+auto_increment = input(acceptable_ans=acceptable_ans,
+                       question="Add auto increment for file numbering? Default is False (y/n): ")
+all_records_csv_path = name_and_write_to_csv(file_path=storage_path,
+                                  session_name=program_session,
+                                  add_date = True,
+                                  auto_increment=False)
 
 # --------------------------
 # Create database (+ postgres extensions) and table if not present
 # --------------------------
+#! TODO: only make 1 engine AND close session for each unit of work
+# short-term long-term db
 url = make_pgdb(password=pg_password,
                 db=short_db_name,
                 port=short_port,
@@ -107,33 +128,33 @@ Base.metadata.create_all(engine) # prevents duplicate tables
 # Session = sessionmaker(bind=engine)
 # session = Session()
 
+try:
+    bot = commands.Bot(command_prefix="/", intents=discord.Intents.all())
 
-bot = commands.Bot(command_prefix="/", intents=discord.Intents.all())
+    @bot.event
+    async def on_ready():
+        print(f"Logged on as {bot.user}!")
 
-@bot.event
-async def on_ready():
-    print(f"Logged on as {bot.user}!")
+    @bot.event
+    async def on_message(message):
+        # ignore replaying to itself
+        if message.author == bot.user:
+            return
+        
+        # TODO: do it in async
+        # TODO: save message in csv (also create folder)
+        # TODO: embed model
+        # TODO: store messages as vectors in pg
+        # TODO: call llm/langgraph for response and conditional querying
+        await message.reply(f"{message.author} said: {message.content}", mention_author=True)
 
-@bot.event
-async def on_message(message):
-    # ignore replaying to itself
-    if message.author == bot.user:
-        return
-    
-    # TODO: do it in async
-    # TODO: save message in csv (also create folder)
-    # TODO: embed model
-    # TODO: store messages as vectors in pg
-    # TODO: call llm/langgraph for response and conditional querying
-    await message.reply(f"{message.author} said: {message.content}", mention_author=True)
-
-bot.run(discord_token)
-
-
-# TODO: process csv and vectors to long-term memory (create log)
-# TODO: stop compose container
-# TODO: clear short term memory data/rows
-# TODO: close discord bot
-# --------------------------
-# stop docker compose command for DB
-# --------------------------
+    bot.run(discord_token)
+except KeyboardInterrupt:
+    pass
+    # TODO: process csv and vectors to long-term memory (create log)
+    # TODO: stop compose container
+    # TODO: clear short term memory data/rows
+    # TODO: close discord bot
+    # --------------------------
+    # stop docker compose command for DB
+    # --------------------------
