@@ -19,11 +19,81 @@ import numpy as np
 # --------------------------
 # SQLAlchemy
 # --------------------------
-def make_pgdb(password: str, db: str, user: str="postgres", host: str="localhost", port: int=5432, add_vectors: bool=False):
+
+#!!!
+class PostgresDataBase:
+    def __init__(self,
+                 password: str,
+                 db_name: str,
+                 port: int = 5432,
+                 user: str = "postgres",
+                 host: str = "localhost"):
+        self.password = password 
+        self.db_name = db_name
+        self.port = port
+        self.user = user
+        self.host = host
+
+        self.url = f'postgresql+psycopg://{self.user}:{self.password}@{self.host}:{self.port}/{self.db_name}'
+
+        self.engine = create_engine(self.url, pool_size=50, echo=False)
+        self.Session = sessionmaker(bind=self.engine)
+
+    def make_db(self):
+        """
+        If database doesn't exist, create one.
+        Reference: Connect to PostgreSQL Using SQLAlchemy & Python (https://www.youtube.com/watch?v=neW9Y9xh4jc)
+
+        Returns postgres url
+        """
+        if not database_exists(self.url) -> str:
+            create_database(self.url)
+            print(f"Database {self.db_name} has been sucessfully created.")
+        else:
+            print(f"The database with '{self.db_name}' name already exists.")
+        
+        return self.url
+    
+    def enable_vectors(self) -> None:
+        """
+            Adds pgvectorscale to db
+        """
+        with Session(self.engine) as session:
+            session.execute(text("CREATE EXTENSION IF NOT EXISTS vectorscale CASCADE;")) # CASCADE will automatically install pgvector
+            session.commit()
+        print("Vectorscale enabled.")
+    
+
+
+#!!!!!!!!!
+#!!!!!!!!!!
+
+
+def create_postgres_url(password: str,
+                        db_name: str,
+                        port: int,
+                        user: str = "postgres",
+                        host: str = "localhost") -> str:
+    """
+    Create postgres database url.
+
+    - password: postgres password
+    - db_name: postgres database name
+    - port: postgres database port number
+    - user: postgres username
+    - host: postgres network name
+
+    Returns database url.
+    """    
+
+    return f'postgresql+psycopg://{user}:{password}@{host}:{port}/{db_name}'
+#! TODO: get rid of postgres url
+def make_pgdb(engine: str, password: str, db: str, user: str="postgres", host: str="localhost", port: int=5432, add_vectors: bool=False) -> None:
     """
     If database doesn't exist, create one.
     Reference: Connect to PostgreSQL Using SQLAlchemy & Python (https://www.youtube.com/watch?v=neW9Y9xh4jc)
 
+    - engine: SQLAlchemy engine
     - password: postgres password
     - db: database name
     - user: postgres username
@@ -43,20 +113,20 @@ def make_pgdb(password: str, db: str, user: str="postgres", host: str="localhost
     else:
         print(f"The database with '{db}' name already exists.")
 
+    #! TODO: make it another function
     if add_vectors:
-        enable_vectors(url)
+        enable_vectors(engine, url)
     
-    return url
+    # return url
 
 
-def enable_vectors(url: str) -> None:
+def enable_vectors(engine: str, url: str) -> None:
         """
             Add pgvectorscale to db
 
+            - engine: SQLAlchemy engine 
             - url: postgres db url
         """
-        #TODO: get rid of engine
-        engine = create_engine(url, echo=False)
         with Session(engine) as session: # will auto close
             session.execute(text("CREATE EXTENSION IF NOT EXISTS vectorscale CASCADE;")) # CASCADE will automatically install pgvector
             session.commit()

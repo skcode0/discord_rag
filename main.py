@@ -1,5 +1,5 @@
 import os
-from utils import make_pgdb, create_program_session_dir, name_and_write_to_csv, validate_ans
+from utils import make_pgdb, create_program_session_dir, create_postgres_url, name_and_write_to_csv, validate_ans
 from sqlalchemy import create_engine, Index
 from sqlalchemy.orm import DeclarativeBase, sessionmaker, mapped_column, Mapped
 from pgvector.sqlalchemy import Vector
@@ -82,14 +82,19 @@ all_records_csv_path = name_and_write_to_csv(file_path=storage_path,
 # --------------------------
 # Create database (+ postgres extensions) and table if not present
 # --------------------------
-#! TODO: only make 1 engine AND close session for each unit of work
 # short-term long-term db
-url = make_pgdb(password=pg_password,
-                db=short_db_name,
-                port=short_port,
-                add_vectors=True)
+url = create_postgres_url(password=pg_password,
+                          db_name=short_db_name,
+                          port=short_port)
 
 engine = create_engine(url, echo=False)
+
+#! TODO: fix params
+make_pgdb(engine=engine,
+          password=pg_password,
+          db=short_db_name,
+          port=short_port,
+          add_vectors=True)
 
 class Base(DeclarativeBase):
     pass
@@ -120,14 +125,12 @@ class Vectors(Base):
 
 Base.metadata.create_all(engine) # prevents duplicate tables
 
+Session = sessionmaker(bind=engine)
 # --------------------------
 # Store Discord messages as embeddings (+ csv files) and call llm with rag to answer user inputs
 # --------------------------
 
 # TODO
-# Session = sessionmaker(bind=engine)
-# session = Session()
-
 try:
     bot = commands.Bot(command_prefix="/", intents=discord.Intents.all())
 
