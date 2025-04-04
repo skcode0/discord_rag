@@ -20,7 +20,7 @@ import numpy as np
 # SQLAlchemy
 # --------------------------
 
-#!!!
+#!!! Make it async
 class Base(DeclarativeBase):
     pass
 
@@ -42,6 +42,7 @@ class PostgresDataBase:
         self.engine = create_engine(self.url, pool_size=50, echo=False)
         self.Session = sessionmaker(bind=self.engine)
 
+
     def make_db(self) -> str:
         """
         If database doesn't exist, create one.
@@ -57,6 +58,7 @@ class PostgresDataBase:
         
         return self.url
     
+
     def enable_vectors(self) -> None:
         """
             Adds pgvectorscale to db
@@ -65,6 +67,7 @@ class PostgresDataBase:
             session.execute(text("CREATE EXTENSION IF NOT EXISTS vectorscale CASCADE;")) # CASCADE will automatically install pgvector
             session.commit()
         print("Vectorscale enabled.")
+
     
     def add_record(self, table: Type[Base], data: Dict[str, Any]) -> None:
         """
@@ -85,6 +88,7 @@ class PostgresDataBase:
             session.rollback()
             raise e 
     
+
     def query_vector(self, 
                      query: List[Union[int, float]],
                      search_list_size: int=100,
@@ -124,7 +128,7 @@ class PostgresDataBase:
             # https://github.com/timescale/pgvectorscale/blob/main/README.md?utm_source=chatgpt.com
             session.execute(text(f"SET diskann.query_search_list_size = {search_list_size}"))
             session.execute(text(f"SET diskann.query_rescore = {rescore}"))
-            
+
             result = session.execute(sql, params)
             rows = result.fetchall()
             columns = result.keys()
@@ -132,149 +136,11 @@ class PostgresDataBase:
         return [dict(zip(columns, row)) for row in rows]
 
 
-#!!!!!!!!!
-#!!!!!!!!!!
-
-
-def create_postgres_url(password: str,
-                        db_name: str,
-                        port: int,
-                        user: str = "postgres",
-                        host: str = "localhost") -> str:
-    """
-    Create postgres database url.
-
-    - password: postgres password
-    - db_name: postgres database name
-    - port: postgres database port number
-    - user: postgres username
-    - host: postgres network name
-
-    Returns database url.
-    """    
-
-    return f'postgresql+psycopg://{user}:{password}@{host}:{port}/{db_name}'
-#! TODO: get rid of postgres url
-def make_pgdb(engine: str, password: str, db: str, user: str="postgres", host: str="localhost", port: int=5432, add_vectors: bool=False) -> None:
-    """
-    If database doesn't exist, create one.
-    Reference: Connect to PostgreSQL Using SQLAlchemy & Python (https://www.youtube.com/watch?v=neW9Y9xh4jc)
-
-    - engine: SQLAlchemy engine
-    - password: postgres password
-    - db: database name
-    - user: postgres username
-    - host: host network name
-    - port: database port number
-    - add_vectors: enable vector embedding or not
-
-    Returns postgres url
-    """
-    
-    # postgresql + pschcopg3
-    url = f'postgresql+psycopg://{user}:{password}@{host}:{port}/{db}'
-    
-    if not database_exists(url):
-        create_database(url)
-        print(f"Database {db} has been sucessfully created.")
-    else:
-        print(f"The database with '{db}' name already exists.")
-
-    #! TODO: make it another function
-    if add_vectors:
-        enable_vectors(engine, url)
-    
-    # return url
-
-
-def enable_vectors(engine: str, url: str) -> None:
-        """
-            Add pgvectorscale to db
-
-            - engine: SQLAlchemy engine 
-            - url: postgres db url
-        """
-        with Session(engine) as session: # will auto close
-            session.execute(text("CREATE EXTENSION IF NOT EXISTS vectorscale CASCADE;")) # CASCADE will automatically install pgvector
-            session.commit()
-        print("Vectorscale enabled.")
-
-
-
-# TODO: don't pass in session as param. create session here and close
-def add_record(table: Type[Base], 
-            session: Session, 
-            data: Dict[str, Any]) -> None:
-    """
-    Add record. If record could not be added, it will raise error. 
-
-    - table: table to add record
-    - session: SQLAlchemy session
-    - data: record data. If the data dict's keys don't have the same name as the table name or there's more keys than column names, it will raise error. If there are less keys than columns, then depending on whether the column is nullable or not, it will add null or raise (IntegrityError) error.
-    
-    """
-
+    # TODO: delete (list of) data if needed
+    def delete_rows(self, ):
     
 
-    try:
-        session.add(table(**data))
-        session.commit()
-    except Exception as e:
-        session.rollback()
-        raise e
 
-
-#TODO ------------------------------
-def query_vector(query: List[Union[int, float]], 
-                 db_url: str, 
-                 search_list_size: int=100, 
-                 rescore: int=50, 
-                 top_k: int=5) -> List[Dict]:
-    """
-    Use streamingDiskAnn and cosine distance to get the most relevant query answers.
-
-    - query: vectorized query input
-    - db_url: url to postgres database
-    - search_list_size: number of additional candidates considered during the graph search
-    - rescore: re-evaluating the distances of candidate points to improve the precision of the results
-    - top_k: get top k results
-    """
-    engine = create_engine(db_url) 
-    Session = sessionmaker(bind=engine)
-    query_session = Session()
-
-    # https://github.com/timescale/pgvectorscale/blob/main/README.md?utm_source=chatgpt.com
-    query_session.execute(text(f"SET diskann.query_search_list_size = {search_list_size}"))
-    query_session.execute(text(f"SET diskann.query_rescore = {rescore}")) 
-
-    # <=> is cosine DISTANCE (1 - cosine similarity); lower the distance, the better
-    # Note: pgvectorscale currently supports: cosine distance (<=>) queries, for indices created with vector_cosine_ops; L2 distance (<->) queries, for indices created with vector_l2_ops; and inner product (<#>) queries, for indices created with vector_ip_ops. This is the same syntax used by pgvector.
-    sql = text("""
-                WITH relaxed_results AS MATERIALIZED (
-                SELECT 
-                    *,
-                    embedding <=> :embedding AS distance
-                FROM vectors
-                ORDER BY distance
-                LIMIT :limit)
-               
-                SELECT * 
-                FROM relaxed_results 
-                ORDER BY distance;
-               """)
-    
-    params = {
-        'embedding': str(query),  # seems like vector embedding needs to be passed in as string
-        'limit': top_k
-    }
-
-    result = query_session.execute(sql, params)
-    rows = result.fetchall()
-
-    columns = result.keys()
-    
-    query_session.close()
-    return [dict(zip(columns, row)) for row in rows]
 
 # TODO
 def shutdown_protocol():
