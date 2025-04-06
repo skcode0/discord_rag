@@ -15,6 +15,7 @@ from datetime import datetime
 import re
 import pandas as pd
 import numpy as np
+from pandas.io.parsers import TextFileReader
 
 # --------------------------
 # SQLAlchemy
@@ -138,7 +139,7 @@ class PostgresDataBase:
 
     # TODO: delete (list of) data if needed
     def delete_rows(self, ):
-    
+        
 
 
 
@@ -158,6 +159,7 @@ def shutdown_protocol():
 # --------------------------
 # Folder/File Saving
 # --------------------------
+#!!! Make functions async
 def create_program_session_dir() -> None:
     """
     Creates a folder with a program session name.
@@ -613,7 +615,8 @@ def update_file_num_pkl(dir_path: str = './',
 
 def csv_to_pd(filepath) -> pd.DataFrame:
     """
-    Return csv as pandas dataframe
+    Converts csv to pandas dataframe. 
+    Recommend using it for files that take less than 1-2GB of memory. If file is larger, or pc lacks memory, use csv_to_pd_chunks which prevents loading everything into memory.
 
     - filepath: full csv file path
 
@@ -625,6 +628,21 @@ def csv_to_pd(filepath) -> pd.DataFrame:
     df = pd.read_csv(filepath)
 
     return df
+
+#TODO
+def csv_to_pd_chunks(filepath) -> TextFileReader:
+    """
+    Converts csv to pandas dataframe chunks.
+    Recommend using it for files that take up more than 1-2GB memory or for pc that has low memory.
+    
+    - filepath: full csv file path
+
+    Returns iterable pandas chunks.
+    """
+    if not filepath.endswith(".csv"):
+        filepath += ".csv"
+    
+    #! TODO
 
 def str_to_vec(s: str) -> np.array:
     """
@@ -640,11 +658,14 @@ def str_to_vec(s: str) -> np.array:
 
 
 #TODO pandas --> postgres 
-def pd_to_postgres(pd: pd.DataFrame) -> None:
+def pd_to_postgres(pd: pd.DataFrame,
+                   db_url: str) -> None:
     """
     Send pandas dataframe to postgres for storage.
 
     - pd: pandas dataframe
+    - db_url: postgres db url
     """
+
     
 
