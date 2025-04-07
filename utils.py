@@ -7,7 +7,7 @@ from pathlib import Path
 from dotenv import load_dotenv, set_key
 import csv
 import pickle
-from typing import Optional, Type, Any, Dict, List, Union, TypeVar
+from typing import Optional, Type, Any, Dict, List, Union, Hashable
 import ast
 import random
 import string
@@ -613,36 +613,35 @@ def update_file_num_pkl(dir_path: str = './',
     return pkl_file_path
         
 
-def csv_to_pd(filepath) -> pd.DataFrame:
+def csv_to_pd(filepath: str, 
+              chunksize: Optional[int] = None,
+              parse_date: Union[
+                  bool,
+                  List[Hashable],
+                  List[List[Hashable]],
+                  Dict[Hashable, List[Hashable]]] = False,
+              date_format: Optional[Union[str, dict]] = None) -> Union[pd.DataFrame, TextFileReader]:
     """
-    Converts csv to pandas dataframe. 
+    Converts csv to pandas dataframe/iterator. 
     Recommend using it for files that take less than 1-2GB of memory. If file is larger, or pc lacks memory, use csv_to_pd_chunks which prevents loading everything into memory.
 
     - filepath: full csv file path
+    - chunksize: how many rows/data per chunk
+    - parse_date: parse date or not (auto inference for python 2.0+)
+    - date_format: give specific date format to adhere to. Don't use when the dates have multiple formats.
 
-    Returns pandas dataframe
+    Returns either pandas dataframe or iterable pandas chunks.
     """
     if not filepath.endswith(".csv"):
          filepath += ".csv"
 
-    df = pd.read_csv(filepath)
+    df = pd.read_csv(filepath, 
+                     chunksize=chunksize,
+                     parse_date=parse_date,
+                     date_format=date_format)
 
     return df
 
-#TODO
-def csv_to_pd_chunks(filepath) -> TextFileReader:
-    """
-    Converts csv to pandas dataframe chunks.
-    Recommend using it for files that take up more than 1-2GB memory or for pc that has low memory.
-    
-    - filepath: full csv file path
-
-    Returns iterable pandas chunks.
-    """
-    if not filepath.endswith(".csv"):
-        filepath += ".csv"
-    
-    #! TODO
 
 def str_to_vec(s: str) -> np.array:
     """
@@ -659,13 +658,20 @@ def str_to_vec(s: str) -> np.array:
 
 #TODO pandas --> postgres 
 def pd_to_postgres(pd: pd.DataFrame,
-                   db_url: str) -> None:
+                   sqlalchemy_engine: Engine,
+                   if_exists: str = 'append',
+                   index: bool = False) -> None:
     """
     Send pandas dataframe to postgres for storage.
 
     - pd: pandas dataframe
-    - db_url: postgres db url
+    - sqlalchemy_engine: sqlAlchemy engine
+    - if_exists: if table exists, 'fail', 'replace', or 'append'. Default is 'append'.
+    - index: use dataframe index as column or not. Default is False.
+    - 
     """
+
+    pd.to_sql
 
     
 

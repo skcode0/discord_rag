@@ -104,7 +104,7 @@ class Vectors(Base):
     # Reference: https://www.youtube.com/watch?v=iwENqqgxm-g&list=PLKm_OLZcymWhtiM-0oQE2ABrrbgsndsn0
     __tablename__ = "vectors"
     id: Mapped[int] = mapped_column(primary_key=True) # will auto increment
-    time_spoken: Mapped[datetime]
+    timestamp: Mapped[datetime]
     speaker: Mapped[str]
     text: Mapped[str]
     embedding = mapped_column(Vector(embedding_dim))
