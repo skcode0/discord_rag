@@ -2,12 +2,13 @@ from sqlalchemy_utils import database_exists, create_database
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.engine import Engine
 import os
 from pathlib import Path
 from dotenv import load_dotenv, set_key
 import csv
 import pickle
-from typing import Optional, Type, Any, Dict, List, Union, Hashable
+from typing import Optional, Type, Any, Dict, List, Union, Hashable, Callable, Literal
 import ast
 import random
 import string
@@ -16,15 +17,15 @@ import re
 import pandas as pd
 import numpy as np
 from pandas.io.parsers import TextFileReader
+import logging
 
 # --------------------------
 # SQLAlchemy
 # --------------------------
-
-#!!! Make it async
 class Base(DeclarativeBase):
     pass
 
+#!!! Make methods async
 class PostgresDataBase:
     def __init__(self,
                  password: str,
@@ -87,7 +88,7 @@ class PostgresDataBase:
                 session.commit()
         except Exception as e:
             session.rollback()
-            raise e 
+            raise
     
 
     def query_vector(self, 
@@ -141,6 +142,41 @@ class PostgresDataBase:
     def delete_rows(self, ):
         
 
+    def pandas_to_postgres(self, 
+                           df: pd.DataFrame,
+                           table_name: str,
+                           logger: logging.Logger,
+                           if_exists: str = "append",
+                           index: bool = False,
+                           method: Optional[Union[Literal['multi'], Callable]] = "multi") -> None:
+        """
+        Sends pandas dataframe/iterator to postgres. Also writes a log.
+
+        - df: dataframe
+        - table_name: name of table to add data to
+        - logger: for logging transactions
+        - if_exists: if table exists, "fail", "replace", or "append"
+        - index: write index as column or not
+        - method: method to insert rows (none = one per row; multi = multiple values in single INSERT; callable with signature (pd_table, conn, keys, data_iter))
+
+        """
+        try:
+            df.to_sql(
+                name=table_name,
+                con=self.engine,
+                if_exists=if_exists,
+                index=index,
+                method=method
+            )
+            
+            logger.info(f"All data added to {table_name} successfully.")
+            logger.info("\n")
+
+        except Exception as e:
+            logger.exception("An error occurred while adding data to %s: %s", table_name, e)
+            logger.info("\n")
+            raise
+
 
 
 # TODO
@@ -159,7 +195,6 @@ def shutdown_protocol():
 # --------------------------
 # Folder/File Saving
 # --------------------------
-#!!! Make functions async
 def create_program_session_dir() -> None:
     """
     Creates a folder with a program session name.
@@ -394,7 +429,7 @@ def check_dir(path_dir:str, session_name:str) -> str:
         
     return session_name
 
-
+#TODO: async
 def write_to_csv(full_file_path: str, 
                  data: Union[Dict[str, Any], List[Dict[str, Any]]]) -> None:
     """
@@ -458,7 +493,7 @@ def write_to_csv(full_file_path: str,
         else:
             writer.writerows(data) # multiple
 
-
+#TODO: async
 def name_and_write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]] = {},
                     file_path: str = "./db/storage",
                     file_name: str = "output.csv",
@@ -654,24 +689,5 @@ def str_to_vec(s: str) -> np.array:
     clean = s.strip("[]")
 
     return np.fromstring(clean, sep=",")
-
-
-#TODO pandas --> postgres 
-def pd_to_postgres(pd: pd.DataFrame,
-                   sqlalchemy_engine: Engine,
-                   if_exists: str = 'append',
-                   index: bool = False) -> None:
-    """
-    Send pandas dataframe to postgres for storage.
-
-    - pd: pandas dataframe
-    - sqlalchemy_engine: sqlAlchemy engine
-    - if_exists: if table exists, 'fail', 'replace', or 'append'. Default is 'append'.
-    - index: use dataframe index as column or not. Default is False.
-    - 
-    """
-
-    pd.to_sql
-
-    
+  
 
