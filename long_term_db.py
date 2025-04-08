@@ -5,6 +5,9 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from utils import PostgresDataBase
+from dotenv import load_dotenv
+import os
+from tables import Vectors
 
 # --------------------------
 # Set up logging
@@ -43,17 +46,17 @@ logger.info("\n")
 df = csv_to_pd(filepath=path,
                parse_date=["timestamp"])
 
-#TODO: create class instance
-#TODO: load env variables
-password = 
-db_name = 
-port = 
+load_dotenv()
+password = os.environ.get('POSTGRES_PASSWORD')
+db_name = os.environ.get('LONG_TERM_DB')
+port = os.environ.get('LONG_TERM_HOST_PORT')
+
 db = PostgresDataBase(password=password,
                       db_name=db_name,
                       port=port)
 
 #! Change to correct table name if necessary
-table_name = "table"
+table_name = "vectors"
 if isinstance(df, pd.DataFrame):
     db.pandas_to_postgres(
         df=df,

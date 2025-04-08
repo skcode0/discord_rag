@@ -138,8 +138,26 @@ class PostgresDataBase:
         return [dict(zip(columns, row)) for row in rows]
 
 
-    # TODO: delete (list of) data if needed
-    def delete_rows(self, ):
+    def delete_all_rows(self, tablename) -> None:
+        """
+        Deletes all rows in a table. Table won't be deleted. Slower than TRUNCATE because it deletes row by row. However, it's safer for data integrity and triggers.
+        
+        """
+        with self.Session() as session:
+            with session.begin():
+                session.execute(text(f"DELETE FROM {tablename};"))
+
+    
+    def truncate_all_rows(self, tablename) -> None:
+        """
+        Truncates all rows in a table. Table won't be deleted. Faster than DELETE but can be harder to log or rollback. 
+
+        - tablename: name of table
+        
+        """
+        with self.Session() as session:
+            with session.begin():
+                session.execute(text(f"TRUNCATE TABLE {tablename};"))
         
 
     def pandas_to_postgres(self, 
