@@ -18,13 +18,11 @@ import pandas as pd
 import numpy as np
 from pandas.io.parsers import TextFileReader
 import logging
+from tables import Base
 
 # --------------------------
 # SQLAlchemy
 # --------------------------
-class Base(DeclarativeBase):
-    pass
-
 #!!! Make methods async
 class PostgresDataBase:
     def __init__(self,

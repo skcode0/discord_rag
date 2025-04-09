@@ -1,7 +1,7 @@
 import os
 from utils import PostgresDataBase, create_program_session_dir, name_and_write_to_csv, validate_ans
 from sqlalchemy import create_engine, Index
-from sqlalchemy.orm import DeclarativeBase, sessionmaker, mapped_column, Mapped
+from sqlalchemy.orm import sessionmaker, mapped_column, Mapped
 from pgvector.sqlalchemy import Vector
 from datetime import datetime
 import subprocess
@@ -9,7 +9,7 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 import sys
-from tables import Vectors
+from tables import Base, Vectors
 
 # --------------------------
 # start Docker Compose command for DBs (only short term)
@@ -91,9 +91,7 @@ db = PostgresDataBase(password=pg_password,
 url = db.make_db()
 db.enable_vectors()
 
-class Base(DeclarativeBase):
-    pass
-
+# create table(s)
 Base.metadata.create_all(db.engine) # prevents duplicate tables
 
 Session = sessionmaker(bind=db.engine)
@@ -120,6 +118,10 @@ try:
         # TODO: save message in csv (also create folder)
         # TODO: embed model
         # TODO: store messages as vectors in pg
+        data = {
+            
+
+        }
         # TODO: call llm/langgraph for response and conditional querying
         await message.reply(f"{message.author} said: {message.content}", mention_author=True)
 
@@ -139,5 +141,6 @@ except KeyboardInterrupt:
         print("Docker Compose stopped successfully.")
     except Exception as e:
         print(f"Error stopping Docker Compose: {e}")
+
 
 # Note: Adding data to long_term_db will be done in 'long_term_db.py'.
