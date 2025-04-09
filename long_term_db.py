@@ -1,5 +1,5 @@
 # csv -> pandas data processing -> postgres
-from utils import csv_to_pd, str_to_vec
+from utils import csv_to_pd, str_to_vec, setLogger, setLogHandler
 import pandas as pd
 import logging
 from datetime import datetime
@@ -8,28 +8,37 @@ from utils import PostgresDataBase
 from dotenv import load_dotenv
 import os
 from tables import Vectors
+import subprocess
+import sys
+
+# TODO: start docker compose
+# --------------------------
+# Docker Compose
+# --------------------------
+command = ["docker", "compose", "-f", "db/compose.yaml", "up", "-d" "long_term_db"]
+
+try:
+    result = subprocess.run(command, check=True, capture_output=True, text=True)
+    print("Docker Compose Output:\n", result.stdout)
+except subprocess.CalledProcessError as e:
+    print("Error running docker-compose:", e.stderr)
+    sys.exit(1)
 
 # --------------------------
 # Set up logging
 # ref: https://www.youtube.com/watch?v=urrfJgHwIJA
 # --------------------------
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger = setLogger(setLevel = 'INFO')
 
 log_dir = './db/storage/long_term_logs'
-log_dir.mkdir(parents=True, exist_ok=True)
-
 today = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 log_filename = f'{today}.log'
 
-log_fullpath = Path(log_dir) / log_filename
-handler = logging.FileHandler(log_fullpath, mode="a")
-handler.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-
+handler = setLogHandler(log_dir=log_dir,
+                        log_filename=log_filename,
+                        mode='a',
+                        setLevel='INFO')
 logger.addHandler(handler)
-
 
 # --------------------------
 # csv -> pandas data processing -> postgres
@@ -45,6 +54,8 @@ logger.info("\n")
 
 df = csv_to_pd(filepath=path,
                parse_date=["timestamp"])
+
+# TODO: clean data (to vector, change to datetime)
 
 load_dotenv()
 password = os.environ.get('POSTGRES_PASSWORD')
@@ -74,3 +85,14 @@ else: # iterator
             )
         except Exception as e:
             continue
+
+# --------------------------
+# Stop docker compose
+# --------------------------
+try:
+    command = ["docker", "compose", "-f", "db/compose.yaml", "down"]
+    subprocess.run(command, check=True)
+    print("Docker Compose stopped successfully.")
+except Exception as e:
+    print(f"Error stopping Docker Compose: {e}")
+    raise

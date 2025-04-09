@@ -1,5 +1,5 @@
 import os
-from utils import make_pgdb, create_program_session_dir, create_postgres_url, name_and_write_to_csv, validate_ans
+from utils import PostgresDataBase, create_program_session_dir, name_and_write_to_csv, validate_ans
 from sqlalchemy import create_engine, Index
 from sqlalchemy.orm import DeclarativeBase, sessionmaker, mapped_column, Mapped
 from pgvector.sqlalchemy import Vector
@@ -12,9 +12,9 @@ import sys
 from tables import Vectors
 
 # --------------------------
-# start Docker Compose command for DBs
+# start Docker Compose command for DBs (only short term)
 # --------------------------
-command = ["docker", "compose", "-f", "db/compose.yaml", "up", "-d"]
+command = ["docker", "compose", "-f", "db/compose.yaml", "up", "-d" "short_term_db"]
 
 try:
     result = subprocess.run(command, check=True, capture_output=True, text=True)
@@ -84,25 +84,20 @@ all_records_csv_path = name_and_write_to_csv(file_path=storage_path,
 # Create database (+ postgres extensions) and table if not present
 # --------------------------
 # short-term long-term db
-url = create_postgres_url(password=pg_password,
-                          db_name=short_db_name,
-                          port=short_port)
+db = PostgresDataBase(password=pg_password,
+                      db=short_db_name,
+                      port=short_port)
 
-engine = create_engine(url, echo=False)
-
-#! TODO: fix params
-make_pgdb(engine=engine,
-          password=pg_password,
-          db=short_db_name,
-          port=short_port,
-          add_vectors=True)
+url = db.make_db()
+db.enable_vectors()
 
 class Base(DeclarativeBase):
     pass
 
-Base.metadata.create_all(engine) # prevents duplicate tables
+Base.metadata.create_all(db.engine) # prevents duplicate tables
 
-Session = sessionmaker(bind=engine)
+Session = sessionmaker(bind=db.engine)
+
 # --------------------------
 # Store Discord messages as embeddings (+ csv files) and call llm with rag to answer user inputs
 # --------------------------
@@ -130,11 +125,19 @@ try:
 
     bot.run(discord_token)
 except KeyboardInterrupt:
-    pass
-    # TODO: process csv and vectors to long-term memory (create log)
-    # TODO: stop compose container
-    # TODO: clear short term memory data/rows
-    # TODO: close discord bot
-    # --------------------------
-    # stop docker compose command for DB
-    # --------------------------
+    # clear short term memory data/rows
+    tablename = "vectors"
+    try:
+        db.truncate_all_rows(tablename=tablename)
+    except Exception as e:
+        print(f"Could not delete all rows from {tablename} table. Error: {e}")
+
+    # stop compose container
+    try:
+        command = ["docker", "compose", "-f", "db/compose.yaml", "down"]
+        subprocess.run(command, check=True)
+        print("Docker Compose stopped successfully.")
+    except Exception as e:
+        print(f"Error stopping Docker Compose: {e}")
+
+# Note: Adding data to long_term_db will be done in 'long_term_db.py'.

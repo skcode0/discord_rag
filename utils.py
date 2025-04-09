@@ -195,23 +195,8 @@ class PostgresDataBase:
             logger.info("\n")
             raise
 
-
-
-# TODO
-def shutdown_protocol():
-    """
-    When program stops, do this.
-    """
-    # write all data to long-term db
-
-    # delete temp database rows
-
-    # close session
-    pass
-
-
 # --------------------------
-# Folder/File Saving
+# Folder/File Saving and Logging
 # --------------------------
 def create_program_session_dir() -> None:
     """
@@ -707,5 +692,72 @@ def str_to_vec(s: str) -> np.array:
     clean = s.strip("[]")
 
     return np.fromstring(clean, sep=",")
-  
 
+
+LogLevelStr = Literal["NOTSET", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+LogLevelInt = Literal[0, 10, 20, 30, 40, 50]
+LogLevel = Union[LogLevelStr, LogLevelInt]
+def setLogger(name: str = __name__,
+              setLevel: LogLevel = "DEBUG") -> logging.Logger:
+    """
+    Sets up logger config.
+
+    - name: name for logger
+    - setLevel: log level ("NOTSET" (0), "DEBUG" (10), "INFO" (20), "WARNING" (30), "ERROR" (40), "CRITICAL" (50))
+    
+    Returns configured Logger
+    """
+    logger = logging.getLogger(name)
+
+    if isinstance(setLevel, str):
+        setLevel_num = getattr(logging, setLevel.upper(), None)
+        if setLevel_num is None:
+            raise ValueError(f"Invalid log level: {setLevel}")
+        setLevel = setLevel_num
+    else:
+        if setLevel not in (0, 10, 20, 30, 40, 50):
+            raise ValueError(f"Invalid log level number: {setLevel}")
+
+    logger.setLevel(setLevel)
+
+    return logger
+
+
+def setLogHandler(log_dir: str = './',
+                  log_filename: str = 'log.log',
+                  mode: str = 'a',
+                  setLevel: LogLevel = 'DEBUG',
+                  fmt: str = '%(asctime)s - %(levelname)s - %(message)s') -> logging.FileHandler:
+    """
+    Sets handler for logger.
+
+    - logger: logger
+    - log_dir: directory where log file is saved
+    - log_filename: file name of log file
+    - mode: how to deal with log file, (a)ppend, over(w)rite, e(x)clusive creation 
+    - setLevel: log level ("NOTSET" (0), "DEBUG" (10), "INFO" (20), "WARNING" (30), "ERROR" (40), "CRITICAL" (50))
+    - fmt: format string for log messages. See the official documentation: https://docs.python.org/3/library/logging.html#logrecord-attributes
+
+    Returns configured FileHandler
+    """
+    log_path = Path(log_dir)
+    log_path.mkdir(parents=True, exist_ok=True)
+
+    log_fullpath = log_path / log_filename
+
+    handler = logging.FileHandler(log_fullpath, mode=mode)
+    if isinstance(setLevel, str):
+        setLevel_num = getattr(logging, setLevel.upper(), None)
+        if setLevel_num is None:
+            raise ValueError(f"Invalid log level: {setLevel}")
+        setLevel = setLevel_num
+    else:
+        if setLevel not in (0, 10, 20, 30, 40, 50):
+            raise ValueError(f"Invalid log level number: {setLevel}")
+
+    handler.setLevel(setLevel)
+
+    formatter = logging.Formatter(fmt)
+    handler.setFormatter(formatter)
+
+    return handler
