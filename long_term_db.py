@@ -55,7 +55,7 @@ logger.info("\n")
 df = csv_to_pd(filepath=path,
                parse_date=["timestamp"])
 
-# TODO: clean data (to vector, change to datetime)
+# TODO: clean data (str to vector, str to datetime)
 
 load_dotenv()
 password = os.environ.get('POSTGRES_PASSWORD')

@@ -19,6 +19,9 @@ import numpy as np
 from pandas.io.parsers import TextFileReader
 import logging
 from tables import Base
+import aiofiles
+import aiofiles.os
+from aiocsv import AsyncDictWriter
 
 # --------------------------
 # SQLAlchemy
@@ -77,8 +80,6 @@ class PostgresDataBase:
         - data: record data. If the data dict's keys don't have the same name as the table name or there's more keys than column names, it will raise error. If there are less keys than columns, then depending on whether the column is nullable or not, it will add null or raise (IntegrityError) error.
         
         """
-
-        session = self.Session()
 
         try:
             with self.Session() as session: # auto-closes session
@@ -430,7 +431,7 @@ def check_dir(path_dir:str, session_name:str) -> str:
         
     return session_name
 
-#TODO: async
+
 def write_to_csv(full_file_path: str, 
                  data: Union[Dict[str, Any], List[Dict[str, Any]]]) -> None:
     """
@@ -454,7 +455,10 @@ def write_to_csv(full_file_path: str,
     if single_row:
         no_data = not data
     else:
-        no_data = not data[0] # assumes only based on first data (for speed). Use any() or all() for more accurcy
+        if not data: # empty list
+            no_data = True
+        else:
+            no_data = not data[0] # assumes only based on first data (for speed). Use any() or all() for more accuracy
         
 
     if no_data and not file_exists:
@@ -494,7 +498,68 @@ def write_to_csv(full_file_path: str,
         else:
             writer.writerows(data) # multiple
 
-#TODO: async
+
+async def write_to_csv_async(full_file_path: str, 
+                             data: Union[Dict[str, Any], List[Dict[str, Any]]]) -> None:
+    """
+    Write (list of) data dict to csv asynchronously.
+
+    - full_file_path: full file path. Note that csv file doesn't need to exist, but folder(s) must exist.
+    - data: (list of) dict to be added
+    """
+    if not full_file_path.endswith(".csv"):
+        full_file_path += ".csv"
+
+    single_row = True
+    if isinstance(data, list):
+        single_row = False
+    
+    no_data = False
+
+    file_exists = await aiofiles.os.path.isfile(full_file_path)
+
+    if single_row:
+        no_data = not data
+    else:
+        if not data: # empty list
+            no_data = True
+        else:
+            no_data = not data[0] # assumes only based on first data (for speed). Use any() or all() for more accuracy
+    
+    if no_data:
+        if file_exists:
+        # create empty file
+            async with aiofiles.open(full_file_path, 'w', newline='', encoding='utf-8') as f:
+                pass
+        return 
+
+    # Only reads first line for header
+    has_header = False
+    if file_exists:
+        async with aiofiles.open(full_file_path, "r", newline='', encoding='utf-8') as f:
+            header = await f.readline()
+            if header:
+                has_header = True  
+
+    if single_row:
+        fieldnames = data.keys()
+    else:
+        fieldnames = data[0].keys()  
+
+    # append data
+    async with aiofiles.open(full_file_path, 'a', newline='', encoding='utf-8') as afp:
+        writer = AsyncDictWriter(afp, fieldnames=fieldnames)
+
+        # if file doesn't have header, add header
+        if not has_header:
+            await writer.writeheader()
+
+        if single_row:
+            await writer.writerow(data) # singular
+        else:
+            await writer.writerows(data) # multiple
+
+
 def name_and_write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]] = {},
                     file_path: str = "./db/storage",
                     file_name: str = "output.csv",

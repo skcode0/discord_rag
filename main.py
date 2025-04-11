@@ -1,5 +1,5 @@
 import os
-from utils import PostgresDataBase, create_program_session_dir, name_and_write_to_csv, validate_ans
+from utils import PostgresDataBase, create_program_session_dir, name_and_write_to_csv, validate_ans, write_to_csv, write_to_csv_async
 from sqlalchemy import create_engine, Index
 from sqlalchemy.orm import sessionmaker, mapped_column, Mapped
 from pgvector.sqlalchemy import Vector
@@ -114,16 +114,32 @@ try:
         if message.author == bot.user:
             return
         
-        # TODO: do it in async
-        # TODO: save message in csv (also create folder)
         # TODO: embed model
+
+
+        embedding = 
         # TODO: store messages as vectors in pg
         data = {
-            
-
+            timestamp = message.created_at,
+            speaker = message.author,
+            text = message.content,
+            embedding = embedding,
         }
+
+        try:
+            # TODO make it async
+            db.add_record(table=Vectors, data=data)
+            # save in all-data csv
+            write_to_csv_async(full_file_path=all_records_csv_path, 
+                         data=data)
+        except Exception as e:
+            # save in not-added csv
+            write_to_csv_async(full_file_path=not_added_csv_path, 
+                         data=data)
+            pass
+
         # TODO: call llm/langgraph for response and conditional querying
-        await message.reply(f"{message.author} said: {message.content}", mention_author=True)
+        await message.reply(f"{message.author} said: {message.content}", mention_author=True) #! Delete this later
 
     bot.run(discord_token)
 except KeyboardInterrupt:
@@ -141,6 +157,8 @@ except KeyboardInterrupt:
         print("Docker Compose stopped successfully.")
     except Exception as e:
         print(f"Error stopping Docker Compose: {e}")
+    
+    raise
 
 
 # Note: Adding data to long_term_db will be done in 'long_term_db.py'.
