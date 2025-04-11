@@ -1,5 +1,6 @@
 import os
-from utils import PostgresDataBase, create_program_session_dir, name_and_write_to_csv, validate_ans, write_to_csv, clean_table, close_docker_compose
+#TODO
+from utils_async import PostgresDataBase, create_program_session_dir, name_and_write_to_csv, validate_ans, write_to_csv, write_to_csv_async
 from sqlalchemy import create_engine, Index
 from sqlalchemy.orm import sessionmaker, mapped_column, Mapped
 from pgvector.sqlalchemy import Vector
@@ -12,11 +13,13 @@ import sys
 from tables import Base, Vectors
 import asyncio
 
-#* Note: This mostly uses synchronous functions. Async version of the code is in 'main_async.py'.
+#* Note: This is asynchronous version of 'main.py'.
+
 
 # --------------------------
 # start Docker Compose command for DBs (only short term)
 # --------------------------
+#TODO: make it async (put in main and use asyncio.run at the end)
 command = ["docker", "compose", "-f", "db/compose.yaml", "up", "-d" "short_term_db"]
 
 try:
@@ -130,13 +133,14 @@ try:
         }
 
         try:
+            # TODO make it async
             db.add_record(table=Vectors, data=data)
             # save in all-data csv
-            write_to_csv(full_file_path=all_records_csv_path, 
+            write_to_csv_async(full_file_path=all_records_csv_path, 
                         data=data)
         except Exception as e:
             # save in not-added csv
-            write_to_csv(full_file_path=not_added_csv_path, 
+            write_to_csv_async(full_file_path=not_added_csv_path, 
                         data=data)
             pass
 
@@ -147,11 +151,18 @@ try:
 except KeyboardInterrupt:
     # clear short term memory data/rows
     tablename = "vectors"
-    clean_table(db=db, tablename=tablename, truncate=True)
+    try:
+        db.truncate_all_rows(tablename=tablename)
+    except Exception as e:
+        print(f"Could not delete all rows from {tablename} table. Error: {e}")
 
     # stop compose container
-    yaml_path = "db/compose.yaml"
-    close_docker_compose(compose_path=yaml_path)
+    try:
+        command = ["docker", "compose", "-f", "db/compose.yaml", "down"]
+        subprocess.run(command, check=True)
+        print("Docker Compose stopped successfully.")
+    except Exception as e:
+        print(f"Error stopping Docker Compose: {e}")
     
     raise
 

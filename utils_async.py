@@ -9,6 +9,7 @@ from dotenv import load_dotenv, set_key
 import csv
 import pickle
 from typing import Optional, Type, Any, Dict, List, Union, Hashable, Callable, Literal
+import ast
 import random
 import string
 from datetime import datetime
@@ -18,14 +19,17 @@ import numpy as np
 from pandas.io.parsers import TextFileReader
 import logging
 from tables import Base
+import aiofiles
+import aiofiles.os
+from aiocsv import AsyncDictWriter
 import subprocess
 
-#* Note: Synchronous. Async version in 'utils_async.py' 
+#* Note: Async version of 'utils.py'.
 
 # --------------------------
 # SQLAlchemy
 # --------------------------
-class PostgresDataBase:
+class PostgresDataBaseAsync:
     def __init__(self,
                  password: str,
                  db_name: str,
@@ -40,6 +44,7 @@ class PostgresDataBase:
 
         self.url = f'postgresql+psycopg://{self.user}:{self.password}@{self.host}:{self.port}/{self.db_name}'
 
+        #TODO
         self.engine = create_engine(self.url, pool_size=50, echo=False)
         self.Session = sessionmaker(bind=self.engine)
 
@@ -70,7 +75,7 @@ class PostgresDataBase:
         print("Vectorscale enabled.")
 
     
-
+    #TODO: async
     def add_record(self, table: Type[Base], data: Dict[str, Any]) -> None:
         """
         Add record. If record could not be added, it will raise error. 
@@ -88,7 +93,7 @@ class PostgresDataBase:
             session.rollback()
             raise
     
-
+    #TODO: async
     def query_vector(self, 
                      query: List[Union[int, float]],
                      search_list_size: int=100,
@@ -136,6 +141,7 @@ class PostgresDataBase:
         return [dict(zip(columns, row)) for row in rows]
 
 
+    # TODO
     def delete_all_rows(self, tablename) -> None:
         """
         Deletes all rows in a table. Table won't be deleted. Slower than TRUNCATE because it deletes row by row. However, it's safer for data integrity and triggers.
@@ -145,7 +151,7 @@ class PostgresDataBase:
             with session.begin():
                 session.execute(text(f"DELETE FROM {tablename};"))
 
-
+    # TODO
     def truncate_all_rows(self, tablename) -> None:
         """
         Truncates all rows in a table. Table won't be deleted. Faster than DELETE but can be harder to log or rollback. 
@@ -157,7 +163,7 @@ class PostgresDataBase:
             with session.begin():
                 session.execute(text(f"TRUNCATE TABLE {tablename};"))
         
-
+    #TODO
     def pandas_to_postgres(self, 
                            df: pd.DataFrame,
                            table_name: str,
@@ -192,6 +198,8 @@ class PostgresDataBase:
             logger.exception("An error occurred while adding data to %s: %s", table_name, e)
             logger.info("\n")
             raise
+
+
 
 # --------------------------
 # Folder/File Saving and Logging
@@ -498,6 +506,67 @@ def write_to_csv(full_file_path: str,
             writer.writerows(data) # multiple
 
 
+async def write_to_csv_async(full_file_path: str, 
+                             data: Union[Dict[str, Any], List[Dict[str, Any]]]) -> None:
+    """
+    Write (list of) data dict to csv asynchronously.
+
+    - full_file_path: full file path. Note that csv file doesn't need to exist, but folder(s) must exist.
+    - data: (list of) dict to be added
+    """
+    if not full_file_path.endswith(".csv"):
+        full_file_path += ".csv"
+
+    single_row = True
+    if isinstance(data, list):
+        single_row = False
+    
+    no_data = False
+
+    file_exists = await aiofiles.os.path.isfile(full_file_path)
+
+    if single_row:
+        no_data = not data
+    else:
+        if not data: # empty list
+            no_data = True
+        else:
+            no_data = not data[0] # assumes only based on first data (for speed). Use any() or all() for more accuracy
+    
+    if no_data:
+        if file_exists:
+        # create empty file
+            async with aiofiles.open(full_file_path, 'w', newline='', encoding='utf-8') as f:
+                pass
+        return 
+
+    # Only reads first line for header
+    has_header = False
+    if file_exists:
+        async with aiofiles.open(full_file_path, "r", newline='', encoding='utf-8') as f:
+            header = await f.readline()
+            if header:
+                has_header = True  
+
+    if single_row:
+        fieldnames = data.keys()
+    else:
+        fieldnames = data[0].keys()  
+
+    # append data
+    async with aiofiles.open(full_file_path, 'a', newline='', encoding='utf-8') as afp:
+        writer = AsyncDictWriter(afp, fieldnames=fieldnames)
+
+        # if file doesn't have header, add header
+        if not has_header:
+            await writer.writeheader()
+
+        if single_row:
+            await writer.writerow(data) # singular
+        else:
+            await writer.writerows(data) # multiple
+
+
 def name_and_write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]] = {},
                     file_path: str = "./db/storage",
                     file_name: str = "output.csv",
@@ -764,39 +833,31 @@ def setLogHandler(log_dir: str = './',
     return handler
 
 
+
 # --------------------------
 # Handling shutdown
 # --------------------------
-def clean_table(db: PostgresDataBase, 
-                tablename: str,
-                truncate: bool = True) -> None:
+#TODO
+async def shutdown_async(db: PostgresDataBase) -> None:
     """
-    
-    - db: PostgresDataBase class that controls postgres database
-    - tablename: existing table name you want rows deleted/truncated
-    - truncate: truncate table. Faster than delete. If False, 'delete' will be used.
+    Shuts down program asynchronously
 
     """
+    # clear short term memory data/rows
+    tablename = "vectors"
     try:
-        if truncate:
-            db.truncate_all_rows(tablename=tablename)
-        else:
-            db.delete_all_rows(tablename=tablename)
-        print(f"All rows successfully removed from '{tablename}' table.")
+        #TODO
+        await db.truncate_all_rows(tablename=tablename)
     except Exception as e:
-        print(f"Could not delete all rows from '{tablename}' table. Error: {e}")
+        print(f"Could not delete all rows from {tablename} table. Error: {e}")
 
-
-def close_docker_compose(compose_path: str = "db/compose.yaml") -> None:
-    """
-    Closes docker compose container(s).
-
-    - compose_path: path of docker compose yaml file
-
-    """
+    # stop compose container
     try:
-        command = ["docker", "compose", "-f", compose_path, "down"]
+        #TODO
+        command = ["docker", "compose", "-f", "db/compose.yaml", "down"]
         subprocess.run(command, check=True)
         print("Docker Compose stopped successfully.")
     except Exception as e:
         print(f"Error stopping Docker Compose: {e}")
+    
+
