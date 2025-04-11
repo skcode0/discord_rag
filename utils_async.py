@@ -26,6 +26,7 @@ import subprocess
 
 #* Note: Async version of 'utils.py'.
 
+#! change everything to async
 # --------------------------
 # SQLAlchemy
 # --------------------------
@@ -838,26 +839,37 @@ def setLogHandler(log_dir: str = './',
 # Handling shutdown
 # --------------------------
 #TODO
-async def shutdown_async(db: PostgresDataBase) -> None:
+def clean_table(db: PostgresDataBaseAsync, 
+                tablename: str,
+                truncate: bool = True) -> None:
     """
-    Shuts down program asynchronously
+    
+    - db: PostgresDataBase class that controls postgres database
+    - tablename: existing table name you want rows deleted/truncated
+    - truncate: truncate table. Faster than delete. If False, 'delete' will be used.
 
     """
-    # clear short term memory data/rows
-    tablename = "vectors"
     try:
-        #TODO
-        await db.truncate_all_rows(tablename=tablename)
+        if truncate:
+            db.truncate_all_rows(tablename=tablename)
+        else:
+            db.delete_all_rows(tablename=tablename)
+        print(f"All rows successfully removed from '{tablename}' table.")
     except Exception as e:
-        print(f"Could not delete all rows from {tablename} table. Error: {e}")
+        print(f"Could not delete all rows from '{tablename}' table. Error: {e}")
 
-    # stop compose container
+
+def close_docker_compose(compose_path: str = "db/compose.yaml") -> None:
+    """
+    Closes docker compose container(s).
+
+    - compose_path: path of docker compose yaml file
+
+    """
     try:
-        #TODO
-        command = ["docker", "compose", "-f", "db/compose.yaml", "down"]
+        command = ["docker", "compose", "-f", compose_path, "down"]
         subprocess.run(command, check=True)
         print("Docker Compose stopped successfully.")
     except Exception as e:
         print(f"Error stopping Docker Compose: {e}")
-    
 

@@ -102,8 +102,9 @@ Session = sessionmaker(bind=db.engine)
 # --------------------------
 # Store Discord messages as embeddings (+ csv files) and call llm with rag to answer user inputs
 # --------------------------
+# embed model
+embed_model = 
 
-# TODO
 try:
     bot = commands.Bot(command_prefix="/", intents=discord.Intents.all())
 
@@ -117,19 +118,22 @@ try:
         if message.author == bot.user:
             return
         
-        # TODO: embed model
+        # TODO: call llm/langgraph for response and conditional querying
+        await message.reply(f"{message.author} said: {message.content}", mention_author=True) #! Delete this later
         
-
-        embedding = 
-        # TODO: store messages as vectors in pg
-        data = {
-            timestamp = message.created_at,
-            speaker = message.author,
-            text = message.content,
-            embedding = embedding,
-        }
-
+        # add message as vector in postgres
         try:
+            # TODO: create embedding
+            embedding = 
+
+            # TODO: store messages as vectors in pg
+            data = {
+                timestamp = message.created_at,
+                speaker = message.author,
+                text = message.content,
+                embedding = embedding,
+            }
+
             db.add_record(table=Vectors, data=data)
             # save in all-data csv
             write_to_csv(full_file_path=all_records_csv_path, 
@@ -140,10 +144,8 @@ try:
                         data=data)
             pass
 
-        # TODO: call llm/langgraph for response and conditional querying
-        await message.reply(f"{message.author} said: {message.content}", mention_author=True) #! Delete this later
-
     bot.run(discord_token)
+    
 except KeyboardInterrupt:
     # clear short term memory data/rows
     tablename = "vectors"
