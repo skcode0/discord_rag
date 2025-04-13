@@ -1,7 +1,8 @@
 from sqlalchemy_utils import database_exists, create_database
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, Index
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker, mapped_column, Mapped
+from pgvector.sqlalchemy import Vector
 from sqlalchemy.engine import Engine
 import os
 from pathlib import Path
@@ -17,14 +18,70 @@ import pandas as pd
 import numpy as np
 from pandas.io.parsers import TextFileReader
 import logging
-from tables import Base
 import subprocess
+from tables import Base
 
 #* Note: Synchronous. Async version in 'utils_async.py' 
 
 # --------------------------
 # SQLAlchemy
 # --------------------------
+tablename = "vectors"
+embedding_dim = int(os.environ.get('EMBEDDING_DIM'))
+cols = {
+    # Reference: https://www.youtube.com/watch?v=iwENqqgxm-g&list=PLKm_OLZcymWhtiM-0oQE2ABrrbgsndsn0
+    '__annotations__': {
+            'id': Mapped[int],
+            'timestamp': Mapped[datetime],
+            'speaker': Mapped[str],
+            'text': Mapped[str],
+            'embedding_model': Mapped[str],
+            'embedding': Mapped[list[float]],
+        },
+    'id': mapped_column(primary_key=True, autoincrement=True),
+    'timestamp': mapped_column(),
+    'speaker': mapped_column(),
+    'text': mapped_column(),
+    'embedding_model': mapped_column(),
+    'embedding': mapped_column(Vector(embedding_dim)),
+}
+
+table_args = (
+        # Reference: https://www.youtube.com/watch?v=WsDVBEmTlaI&list=PLKm_OLZcymWhtiM-0oQE2ABrrbgsndsn0&index=15
+        # StreamingDiskAnn index (https://github.com/timescale/pgvectorscale/blob/main/README.md)
+        Index(
+            "embedding_idx",
+            "embedding",
+            postgresql_using="diskann",
+            # postgresql_with={
+
+            # } # index build parameters,
+            postgresql_ops={"embedding": "vector_cosine_ops"} # cosine similarity
+        )
+    )
+
+def create_table_class(tablename: str = "vectors",
+                       attrs: dict = cols,
+                       table_args: Optional[tuple] = ()) -> type:
+    """
+    Dynamically create table class.
+
+    - tablename: name of database table
+    - attrs: dict of table attributes (e.g., columns)
+    - table_args: additional arguments for table configuration
+
+    Returns class
+    """
+    tablename = tablename.lower()
+    attrs.update({"__tablename__": tablename})
+
+    if table_args:
+        attrs["__table_args__"] = table_args
+
+    class_name = tablename.capitalize()
+    return type(class_name, (Base,), attrs)
+
+
 class PostgresDataBase:
     def __init__(self,
                  password: str,

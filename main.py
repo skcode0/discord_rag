@@ -9,8 +9,8 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 import sys
-from tables import Base, Vectors
 import asyncio
+from tables import Base, Transcription, Vectors
 
 #* Note: This mostly uses synchronous functions. Async version of the code is in 'main_async.py'.
 
@@ -40,6 +40,12 @@ long_port = os.environ.get('LONG_TERM_HOST_PORT')
 
 # discord
 discord_token = os.environ.get('DISCORD_TOKEN')
+
+# HF access token
+hf_token = os.environ.get('hf_token')
+
+# llm model
+llm_model = os.environ.get('LLM_MODEL')
 
 # embedding model
 embedding_dim = int(os.environ.get('EMBEDDING_DIM'))
@@ -94,6 +100,10 @@ db = PostgresDataBase(password=pg_password,
 url = db.make_db()
 db.enable_vectors()
 
+# TODO
+tablename = "intflat_multi_e5_large_inst"
+
+
 # create table(s)
 Base.metadata.create_all(db.engine) # prevents duplicate tables
 
@@ -102,9 +112,6 @@ Session = sessionmaker(bind=db.engine)
 # --------------------------
 # Store Discord messages as embeddings (+ csv files) and call llm with rag to answer user inputs
 # --------------------------
-# embed model
-embed_model = 
-
 try:
     bot = commands.Bot(command_prefix="/", intents=discord.Intents.all())
 
@@ -131,9 +138,11 @@ try:
                 timestamp = message.created_at,
                 speaker = message.author,
                 text = message.content,
+                embedding_model = embedding_model,
                 embedding = embedding,
             }
 
+            # vectors tables need to be dynamic
             db.add_record(table=Vectors, data=data)
             # save in all-data csv
             write_to_csv(full_file_path=all_records_csv_path, 
