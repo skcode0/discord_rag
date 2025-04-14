@@ -20,6 +20,8 @@ from pandas.io.parsers import TextFileReader
 import logging
 import subprocess
 from tables import Base
+from sentence_transformers import SentenceTransformer
+
 
 #* Note: Synchronous. Async version in 'utils_async.py' 
 
@@ -824,3 +826,40 @@ def close_docker_compose(compose_path: str = "db/compose.yaml") -> None:
         print("Docker Compose stopped successfully.")
     except Exception as e:
         print(f"Error stopping Docker Compose: {e}")
+
+
+# --------------------------
+# Embedding Model
+# --------------------------
+task = 'Given a user query, retrieve relevant information that answer the query'
+def get_detailed_instruct(query: str,
+                          task_description: str = task) -> str:
+    """
+    Adds instruction to query. Some embedding models like 'intfloat/multilingual-e5-large-instruct' requires instructions to be added to query.
+
+    - task_description: instruction for the query
+    - query: input query
+
+    Returns string of instruction + query 
+    """
+    return f'Instruct: {task_description}\nQuery: {query}'
+
+def create_embedding(model_name: str, 
+                     input: str) -> np.ndarray:
+    """
+        Creates vector embedding
+        
+        - model_name: name of embedding model
+        - input: input string that needs to be convereted to embedding
+
+        Returns NORMALIZED numpy array of vector embedding
+    """
+    model = SentenceTransformer(model_name)
+
+    embeddings = model.encode(input, convert_to_tensor=False, normalize_embeddings=True)
+
+    return embeddings
+
+
+
+
