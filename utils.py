@@ -831,11 +831,11 @@ def close_docker_compose(compose_path: str = "db/compose.yaml") -> None:
 # --------------------------
 # Embedding Model
 # --------------------------
-task = 'Given a user query, retrieve relevant information that answer the query'
+task = 'Given a user query, retrieve relevant information that answer the query.'
 def get_detailed_instruct(query: str,
                           task_description: str = task) -> str:
     """
-    Adds instruction to query. Some embedding models like 'intfloat/multilingual-e5-large-instruct' requires instructions to be added to query.
+    Adds instruction to query. Some embedding models like 'intfloat/multilingual-e5-large-instruct' require instructions to be added to query. Documents don't need instructions.
 
     - task_description: instruction for the query
     - query: input query

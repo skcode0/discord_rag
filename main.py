@@ -1,5 +1,5 @@
 import os
-from utils import PostgresDataBase, create_program_session_dir, name_and_write_to_csv, validate_ans, write_to_csv, clean_table, close_docker_compose
+from utils import PostgresDataBase, create_program_session_dir, name_and_write_to_csv, validate_ans, write_to_csv, clean_table, close_docker_compose, get_detailed_instruct, create_embedding
 from sqlalchemy import create_engine, Index
 from sqlalchemy.orm import sessionmaker, mapped_column, Mapped
 from pgvector.sqlalchemy import Vector
@@ -125,13 +125,18 @@ try:
         # await message.reply(f"{message.author} said: {message.content}", mention_author=True) #! Delete this later
 
         try:
-            # TODO: create embedding
-            embedding = 
+            # Create embedding
+            # Note: Some embedding models like 'intfloat/multilingual-e5-large-instruct' require instructions to be added to query. Documents don't need instructions.
+            task = "Given user's message query, retrieve relevant messages that answer the query."
+            instruct_query = get_detailed_instruct(query=message.content,
+                                                   task_description=task)
+            embedding = create_embedding(model_name=embedding_model,
+                                         input=instruct_query)
 
-            # TODO: call llm/langgraph for response and conditional querying
+            # TODO: Call llm/langgraph for response and conditional querying
+            
 
-
-            # store messages as vectors in pg
+            # Store messages as vectors in pg
             data = {
                 # Transcriptions
                 "timestamp": message.created_at,
@@ -158,8 +163,9 @@ try:
     bot.run(discord_token)
     
 except KeyboardInterrupt:
-    # clear short term memory data/rows
-    #! TODO decide if table should be cleared or check before deleting
+    # Clear short term memory data/rows
+    # Decide if you want this table without checking. Recommend not deleting until you checked all data is saved properly in csv or in other form(s).
+    #! TODO test this
     # tablename = "vectors"
     # clean_table(db=db, tablename=tablename, truncate=True)
 
