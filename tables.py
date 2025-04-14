@@ -48,3 +48,28 @@ class Vectors(Base):
             postgresql_ops={"embedding": "vector_cosine_ops"} # cosine similarity
         ),
     )
+
+# for short-term (temporary)
+class TranscriptionsVectors(Base):
+    __tablename__: "transcriptionsVectors"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    timestamp: Mapped[datetime]
+    speaker: Mapped[str]
+    text: Mapped[str]
+
+    embedding_model: Mapped[str]
+    embedding = mapped_column(Vector(embedding_dim))
+    index_type: Mapped[str] = mapped_column(nullable=True) # ex. hnsw, ivf, streamingdiskann
+    index_measurement: Mapped[str] = mapped_column(nullable=True) # ex. vector_cosine_ops, vector_l2_ops, vector_ip_ops, etc.
+
+    __table_args__ = (
+        Index(
+            "embedding_idx",
+            "embedding",
+            postgresql_using="diskann",
+            # postgresql_with={
+
+            # } # index build parameters,
+            postgresql_ops={"embedding": "vector_cosine_ops"} # cosine similarity
+        ),
+    )

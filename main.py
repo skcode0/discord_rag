@@ -10,7 +10,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 import sys
 import asyncio
-from tables import Base, Transcription, Vectors
+from tables import Base, Transcriptions, Vectors, TranscriptionsVectors
 
 #* Note: This mostly uses synchronous functions. Async version of the code is in 'main_async.py'.
 
@@ -100,9 +100,6 @@ db = PostgresDataBase(password=pg_password,
 url = db.make_db()
 db.enable_vectors()
 
-# TODO
-tablename = "intflat_multi_e5_large_inst"
-
 
 # create table(s)
 Base.metadata.create_all(db.engine) # prevents duplicate tables
@@ -125,25 +122,30 @@ try:
         if message.author == bot.user:
             return
         
-        # TODO: call llm/langgraph for response and conditional querying
-        await message.reply(f"{message.author} said: {message.content}", mention_author=True) #! Delete this later
-        
-        # add message as vector in postgres
+        # await message.reply(f"{message.author} said: {message.content}", mention_author=True) #! Delete this later
+
         try:
             # TODO: create embedding
             embedding = 
 
-            # TODO: store messages as vectors in pg
+            # TODO: call llm/langgraph for response and conditional querying
+
+
+            # store messages as vectors in pg
             data = {
-                timestamp = message.created_at,
-                speaker = message.author,
-                text = message.content,
-                embedding_model = embedding_model,
-                embedding = embedding,
+                # Transcriptions
+                "timestamp": message.created_at,
+                "speaker": message.author,
+                "text": message.content,
+
+                # Vectors
+                "embedding_model": embedding_model,
+                "embedding": embedding,
+                "index_type": "StreamingDiskAnn", #* change accordingly
+                "index_measurement": "vector_cosine_ops", #* change accordingly
             }
 
-            # vectors tables need to be dynamic
-            db.add_record(table=Vectors, data=data)
+            db.add_record(table=TranscriptionsVectors,data=data)
             # save in all-data csv
             write_to_csv(full_file_path=all_records_csv_path, 
                         data=data)
@@ -157,8 +159,9 @@ try:
     
 except KeyboardInterrupt:
     # clear short term memory data/rows
-    tablename = "vectors"
-    clean_table(db=db, tablename=tablename, truncate=True)
+    #! TODO decide if table should be cleared or check before deleting
+    # tablename = "vectors"
+    # clean_table(db=db, tablename=tablename, truncate=True)
 
     # stop compose container
     yaml_path = "db/compose.yaml"

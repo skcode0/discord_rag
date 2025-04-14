@@ -26,62 +26,6 @@ from tables import Base
 # --------------------------
 # SQLAlchemy
 # --------------------------
-tablename = "vectors"
-embedding_dim = int(os.environ.get('EMBEDDING_DIM'))
-cols = {
-    # Reference: https://www.youtube.com/watch?v=iwENqqgxm-g&list=PLKm_OLZcymWhtiM-0oQE2ABrrbgsndsn0
-    '__annotations__': {
-            'id': Mapped[int],
-            'timestamp': Mapped[datetime],
-            'speaker': Mapped[str],
-            'text': Mapped[str],
-            'embedding_model': Mapped[str],
-            'embedding': Mapped[list[float]],
-        },
-    'id': mapped_column(primary_key=True, autoincrement=True),
-    'timestamp': mapped_column(),
-    'speaker': mapped_column(),
-    'text': mapped_column(),
-    'embedding_model': mapped_column(),
-    'embedding': mapped_column(Vector(embedding_dim)),
-}
-
-table_args = (
-        # Reference: https://www.youtube.com/watch?v=WsDVBEmTlaI&list=PLKm_OLZcymWhtiM-0oQE2ABrrbgsndsn0&index=15
-        # StreamingDiskAnn index (https://github.com/timescale/pgvectorscale/blob/main/README.md)
-        Index(
-            "embedding_idx",
-            "embedding",
-            postgresql_using="diskann",
-            # postgresql_with={
-
-            # } # index build parameters,
-            postgresql_ops={"embedding": "vector_cosine_ops"} # cosine similarity
-        )
-    )
-
-def create_table_class(tablename: str = "vectors",
-                       attrs: dict = cols,
-                       table_args: Optional[tuple] = ()) -> type:
-    """
-    Dynamically create table class.
-
-    - tablename: name of database table
-    - attrs: dict of table attributes (e.g., columns)
-    - table_args: additional arguments for table configuration
-
-    Returns class
-    """
-    tablename = tablename.lower()
-    attrs.update({"__tablename__": tablename})
-
-    if table_args:
-        attrs["__table_args__"] = table_args
-
-    class_name = tablename.capitalize()
-    return type(class_name, (Base,), attrs)
-
-
 class PostgresDataBase:
     def __init__(self,
                  password: str,
@@ -148,6 +92,7 @@ class PostgresDataBase:
 
     def query_vector(self, 
                      query: List[Union[int, float]],
+                     join: bool = False,
                      search_list_size: int=100,
                      rescore: int=50,
                      top_k: int=5) -> List[Dict]:
@@ -155,6 +100,7 @@ class PostgresDataBase:
         Uses streamingDiskAnn and cosine distance to get the most relevant query answers.
 
         - query: vectorized query input
+        - join: join 'vectors' and 'transcriptions' table or not
         - search_list_size: number of additional candidates considered during the graph search
         - rescore: re-evaluating the distances of candidate points to improve the precision of the results
         - top_k: get top k results
@@ -162,19 +108,40 @@ class PostgresDataBase:
 
         # <=> is cosine DISTANCE (1 - cosine similarity); lower the distance, the better
         # Note: pgvectorscale currently supports: cosine distance (<=>) queries, for indices created with vector_cosine_ops; L2 distance (<->) queries, for indices created with vector_l2_ops; and inner product (<#>) queries, for indices created with vector_ip_ops. This is the same syntax used by pgvector.
-        sql = text("""
-                    WITH relaxed_results AS MATERIALIZED (
-                    SELECT 
-                        *,
-                        embedding <=> :embedding AS distance
-                    FROM vectors
-                    ORDER BY distance
-                    LIMIT :limit)
-                
-                    SELECT * 
-                    FROM relaxed_results 
-                    ORDER BY distance;
-                """)
+        sql = ""
+        if join:
+            sql = text("""
+                        WITH relaxed_results AS MATERIALIZED (
+                        SELECT 
+                            timestamp,
+                            speaker,
+                            text,
+                            embedding <=> :embedding AS distance
+                        FROM vectors v INNER JOIN transcriptions t
+                            ON v.transcription_id = t.id 
+                        ORDER BY distance
+                        LIMIT :limit)
+                    
+                        SELECT * 
+                        FROM relaxed_results 
+                        ORDER BY distance;
+                    """)            
+        else:
+            sql = text("""
+                        WITH relaxed_results AS MATERIALIZED (
+                        SELECT 
+                            timestamp,
+                            speaker,
+                            text,
+                            embedding <=> :embedding AS distance
+                        FROM transcriptionsVectors
+                        ORDER BY distance
+                        LIMIT :limit)
+                    
+                        SELECT * 
+                        FROM relaxed_results 
+                        ORDER BY distance;
+                    """)
         
         params = {
             'embedding': str(query),  # seems like vector embedding needs to be passed in as string
