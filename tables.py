@@ -49,7 +49,7 @@ class Vectors(Base):
         ),
     )
 
-# for short-term (temporary)
+# combined table: transcriptions + vectors
 class TranscriptionsVectors(Base):
     __tablename__: "transcriptionsVectors"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)

@@ -861,5 +861,9 @@ def create_embedding(model_name: str,
     return embeddings
 
 
+# --------------------------
+# LLM Agents/Tools
+# --------------------------
+
 
 

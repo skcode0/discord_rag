@@ -1,5 +1,15 @@
 import os
-from utils import PostgresDataBase, create_program_session_dir, name_and_write_to_csv, validate_ans, write_to_csv, clean_table, close_docker_compose, get_detailed_instruct, create_embedding
+from utils import (
+    PostgresDataBase, 
+    create_program_session_dir, 
+    name_and_write_to_csv, 
+    validate_ans, 
+    write_to_csv, 
+    clean_table, 
+    close_docker_compose, 
+    get_detailed_instruct, 
+    create_embedding
+    )
 from sqlalchemy import create_engine, Index
 from sqlalchemy.orm import sessionmaker, mapped_column, Mapped
 from pgvector.sqlalchemy import Vector
@@ -121,8 +131,6 @@ try:
         # ignore replaying to itself
         if message.author == bot.user:
             return
-        
-        # await message.reply(f"{message.author} said: {message.content}", mention_author=True) #! Delete this later
 
         try:
             # Create embedding
@@ -130,11 +138,13 @@ try:
             task = "Given user's message query, retrieve relevant messages that answer the query."
             instruct_query = get_detailed_instruct(query=message.content,
                                                    task_description=task)
-            embedding = create_embedding(model_name=embedding_model,
+            instruct_embedding = create_embedding(model_name=embedding_model,
                                          input=instruct_query)
 
             # TODO: Call llm/langgraph for response and conditional querying
-            
+            #! test
+            results = db.query_vector(qery=instruct_embedding)
+            await message.reply(f"These are the results: \n\n {results}", mention_author=True)
 
             # Store messages as vectors in pg
             data = {
@@ -145,7 +155,8 @@ try:
 
                 # Vectors
                 "embedding_model": embedding_model,
-                "embedding": embedding,
+                "embedding": create_embedding(model_name=embedding_model,
+                                              input=message.content),
                 "index_type": "StreamingDiskAnn", #* change accordingly
                 "index_measurement": "vector_cosine_ops", #* change accordingly
             }
