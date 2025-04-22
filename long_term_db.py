@@ -43,7 +43,7 @@ logger.addHandler(handler)
 # csv -> pandas data processing -> postgres
 # --------------------------
 #! Change to correct path name if necessary
-path = "./db/storage/sample.csv"
+path = "./db/storage/output_2025_04_22_1.csv"
 
 logger.info("==============")
 logger.info(f"{path}")
@@ -51,10 +51,15 @@ logger.info(f"{datetime.now()}")
 logger.info("==============")
 logger.info("\n")
 
-df = csv_to_pd(filepath=path,
-               parse_date=["timestamp"])
+from utils import csv_to_pd, str_to_vec
+import pandas as pd
+path = "./db/storage/output_2025-04-22_1.csv"
 
-# TODO: clean data (str to vector, str to datetime)
+df = csv_to_pd(filepath=path,
+               parse_dates=["timestamp"])
+
+# str to vector
+df['embedding'] = df['embedding'].apply(str_to_vec)
 
 load_dotenv()
 password = os.environ.get('POSTGRES_PASSWORD')

@@ -166,11 +166,10 @@ try:
                                               input=instruct_query)
         
 
-        #! TODO: add date/time to embedding??
         # for storage
         embedding_vector = create_embedding(model_name=embedding_model,
-                                            input=message.content).tolist()
-        # Store messages as vectors in pg
+                                            input=f"{message.created_at.strftime("%Y-%m-%d %H:%M:%S")}: {message.content}").tolist()
+        
         data = {
             # Transcriptions
             "timestamp": message.created_at,
@@ -186,13 +185,10 @@ try:
 
         try:
             # TODO: Call llm/langgraph for response and conditional querying
-            #! test
-            # results = db.query_vector(query=instruct_embedding)
-            # await message.reply(f"These are the results: \n\n {results}", mention_author=True)
+            results = db.query_vector(query=instruct_embedding)
+            await message.reply(f"These are the results: \n\n {results}", mention_author=True)
 
-            await message.reply(f"Instruct Embedding: {instruct_embedding}", mention_author=True)
-
-            # db.add_record(table=TranscriptionsVectors,data=data)
+            db.add_record(table=TranscriptionsVectors,data=data)
             # save in all-data csv
             write_to_csv(full_file_path=all_records_csv_path, 
                         data=data)
@@ -207,10 +203,10 @@ try:
     
 except KeyboardInterrupt:
     # Clear short term memory data/rows
-    # Decide if you want this table without checking. Recommend not deleting until you checked all data is saved properly in csv or in other form(s).
+    # Decide if you want this table without checking. Recommend not deleting until all data is saved properly in csv or in other form(s).
     #! TODO test this
-    # tablename = "vectors"
-    # clean_table(db=db, tablename=tablename, truncate=True)
+    tablename = "vectors"
+    clean_table(db=db, tablename=tablename, truncate=True)
 
     # stop compose container
     yaml_path = "db/compose.yaml"

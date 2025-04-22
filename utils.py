@@ -726,7 +726,7 @@ def update_file_num_pkl(dir_path: str = './',
 
 def csv_to_pd(filepath: str, 
               chunksize: Optional[int] = None,
-              parse_date: Union[
+              parse_dates: Union[
                   bool,
                   List[Hashable],
                   List[List[Hashable]],
@@ -738,7 +738,7 @@ def csv_to_pd(filepath: str,
 
     - filepath: full csv file path
     - chunksize: how many rows/data per chunk
-    - parse_date: parse date or not (auto inference for python 2.0+)
+    - parse_dates: parse date or not (auto inference for python 2.0+)
     - date_format: give specific date format to adhere to. Don't use when the dates have multiple formats.
 
     Returns either pandas dataframe or iterable pandas chunks.
@@ -748,7 +748,7 @@ def csv_to_pd(filepath: str,
 
     df = pd.read_csv(filepath, 
                      chunksize=chunksize,
-                     parse_date=parse_date,
+                     parse_dates=parse_dates,
                      date_format=date_format)
 
     return df
