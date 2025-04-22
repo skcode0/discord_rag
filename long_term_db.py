@@ -40,7 +40,7 @@ handler = setLogHandler(log_dir=log_dir,
 logger.addHandler(handler)
 
 # --------------------------
-# csv -> pandas data processing -> postgres
+# Load csv to pandas, start db
 # --------------------------
 #! Change to correct path name if necessary
 path = "./db/storage/output_2025_04_22_1.csv"
@@ -51,15 +51,12 @@ logger.info(f"{datetime.now()}")
 logger.info("==============")
 logger.info("\n")
 
-from utils import csv_to_pd, str_to_vec
-import pandas as pd
-path = "./db/storage/output_2025-04-22_1.csv"
 
+path = "./db/storage/output_2025-04-22_1.csv"
+# either dataframe or TextFileReader (iteratable pandas chunks)
 df = csv_to_pd(filepath=path,
                parse_dates=["timestamp"])
 
-# str to vector
-df['embedding'] = df['embedding'].apply(str_to_vec)
 
 load_dotenv()
 password = os.environ.get('POSTGRES_PASSWORD')
@@ -70,24 +67,62 @@ db = PostgresDataBase(password=password,
                       db_name=db_name,
                       port=port)
 
-#! Change to correct table name if necessary
-table_name = "vectors"
+# --------------------------
+# Process and save data to db
+# --------------------------
+#! Change to correct table names/cols if necessary
+trans_cols = ['timestamp', 'speaker', 'text']
+vectors_cols = ['embedding_model', 'embedding_dim', 'embedding', 'index_type', 'index_measurement']
+
 if isinstance(df, pd.DataFrame):
+    # str to int
+    df['embedding_dim'] = df['embedding_dim'].astype(int)
+    # str to vector
+    df['embedding'] = df['embedding'].apply(str_to_vec)
+
+    # split df
+    trans_df = df[trans_cols]
+    vectors_df = df[vectors_cols]
+
+    # transcriptions
     db.pandas_to_postgres(
-        df=df,
-        table_name=table_name,
+        df=trans_df,
+        table_name="transcriptions",
+        logger=logger
+    )
+    # vectors
+    db.pandas_to_postgres(
+        df=vectors_df,
+        table_name="vectors",
         logger=logger
     )
 else: # iterator
     for i, chunk in enumerate(df):
+        # str to int
+        chunk['embedding_dim'] = chunk['embedding_dim'].astype(int)
+        # str to vector
+        chunk['embedding'] = chunk['embedding'].apply(str_to_vec)
+
+        # split df
+        trans_chunk = chunk[trans_cols]
+        vectors_chunk = chunk[vectors_cols]
+
         logger.info(f"Chunk {i}: ")
         try:
+            # transcriptions
             db.pandas_to_postgres(
-                df=chunk,
-                table_name=table_name,
+                df=trans_chunk,
+                table_name="transcriptions",
+                logger=logger
+            )
+            # vectors
+            db.pandas_to_postgres(
+                df=vectors_chunk,
+                table_name="vectors",
                 logger=logger
             )
         except Exception as e:
+            print(e)
             continue
 
 # --------------------------

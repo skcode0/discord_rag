@@ -20,7 +20,7 @@ from pandas.io.parsers import TextFileReader
 import logging
 import subprocess
 from tables import Base
-from sentence_transformers import SentenceTransformer
+# from sentence_transformers import SentenceTransformer
 
 
 #* Note: Synchronous. Async version in 'utils_async.py' 
@@ -698,7 +698,8 @@ def update_file_num_pkl(dir_path: str = './',
             file_name, file_num = base.rsplit(delimiter, 1)
             # any decimal numbers (ex. 3.1) will be turned to int
             file_num = int(file_num)
-        except:
+        except Exception as e:
+            print(e)
             file_name = base
             not_added.append(f)
             continue
@@ -737,7 +738,7 @@ def csv_to_pd(filepath: str,
     Recommend using it for files that take less than 1-2GB of memory. If file is larger, or pc lacks memory, use csv_to_pd_chunks which prevents loading everything into memory.
 
     - filepath: full csv file path
-    - chunksize: how many rows/data per chunk
+    - chunksize: how many rows/data per chunk. Default is None. If size defined, it will return TextFileReader, a iterable pandas chunks.
     - parse_dates: parse date or not (auto inference for python 2.0+)
     - date_format: give specific date format to adhere to. Don't use when the dates have multiple formats.
 

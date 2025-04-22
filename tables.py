@@ -28,6 +28,7 @@ class Vectors(Base):
     __tablename__ = "vectors"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     embedding_model: Mapped[str]
+    embedding_dim: Mapped[int]
     embedding = mapped_column(Vector(embedding_dim))
     index_type: Mapped[str] = mapped_column(nullable=True) # ex. hnsw, ivf, streamingdiskann
     index_measurement: Mapped[str] = mapped_column(nullable=True) # ex. vector_cosine_ops, vector_l2_ops, vector_ip_ops, etc.
@@ -57,6 +58,7 @@ class TranscriptionsVectors(Base):
     text: Mapped[str]
 
     embedding_model: Mapped[str]
+    embedding_dim: Mapped[int]
     embedding = mapped_column(Vector(embedding_dim))
     index_type: Mapped[str] = mapped_column(nullable=True) # ex. hnsw, ivf, streamingdiskann
     index_measurement: Mapped[str] = mapped_column(nullable=True) # ex. vector_cosine_ops, vector_l2_ops, vector_ip_ops, etc.

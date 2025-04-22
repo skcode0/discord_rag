@@ -79,7 +79,9 @@ not_added_file_name = "not_added.csv"
 all_file_name = "output.csv"
 
 acceptable_ans = ["yes", "y", "no", "n"]
+print("\n--------------------------------------")
 print("Following questions are for writing data (in csv) that has failed to save in database.")
+print("--------------------------------------")
 date_input = validate_ans(acceptable_ans=acceptable_ans,
                         question="Add date? (y/n):")
 if date_input in ["yes", "y"]:
@@ -101,8 +103,9 @@ not_added_csv_path = name_and_write_to_csv(file_path=storage_path,
                                   auto_increment=auto_increment)
 
 # This is for saving data in csv regardless of whether data was successfully added to database or not. In other words, this is simply a backup save.
-print("----------")
+print("\n--------------------------------------")
 print("Following questions are for writing all data to csv (back-up file).")
+print("--------------------------------------")
 date_input = validate_ans(acceptable_ans=acceptable_ans,
                         question="Add date? (y/n):")
 if date_input in ["yes", "y"]:
@@ -140,6 +143,33 @@ Base.metadata.create_all(db.engine) # prevents duplicate tables
 
 Session = sessionmaker(bind=db.engine)
 
+#! DUMMY DATA
+emb = [
+        ["dog", [1.7, -0.3, 6.9, 19.1, 21.1]],
+        ["apple", [-5.2, 3.1, 0.2, 8.1, 3.5]],
+        ["strawberry", [-4.9, 3.6, 0.9, 7.8, 3.6]],
+        ["building",[60.1, -60.3, 10, -12.3, 9.2]],
+        ["car",[81.6, -72.1, 16, -20.2, 102]]
+]
+
+for i in range(len(emb)):
+    data = {
+                # Transcriptions
+                "timestamp": datetime.datetime.now(),
+                "speaker": f"user_{i}",
+                "text": emb[i][0],
+
+                # Vectors
+                "embedding_model": embedding_model,
+                "embedding_dim": embedding_dim,
+                "embedding": emb[i][1],
+                "index_type": "StreamingDiskAnn", #* change accordingly
+                "index_measurement": "vector_cosine_ops", #* change accordingly
+            }
+    
+    db.add_record(table=TranscriptionsVectors,data=data)
+#! DUMMY DATA
+
 # --------------------------
 # Store Discord messages as embeddings (+ csv files) and call llm with rag to answer user inputs
 # --------------------------
@@ -156,20 +186,26 @@ try:
         if message.author == bot.user:
             return
 
+
         # Create embedding
         # Note: Some embedding models like 'intfloat/multilingual-e5-large-instruct' require instructions to be added to query. Documents don't need instructions.
         task = "Given user's message query, retrieve relevant messages that answer the query."
-        instruct_query = get_detailed_instruct(query=message.content,
-                                                task_description=task)
-        # for querying
-        instruct_embedding = create_embedding(model_name=embedding_model,
-                                              input=instruct_query)
+        # instruct_query = get_detailed_instruct(query=message.content,
+        #                                         task_description=task)
+        # # for querying
+        # instruct_embedding = create_embedding(model_name=embedding_model,
+        #                                       input=instruct_query)
         
 
         # for storage
-        embedding_vector = create_embedding(model_name=embedding_model,
-                                            input=f"{message.created_at.strftime("%Y-%m-%d %H:%M:%S")}: {message.content}").tolist()
-        
+        # embedding_vector = create_embedding(model_name=embedding_model,
+        #                                     input=f"{message.created_at.strftime("%Y-%m-%d %H:%M:%S")}: {message.content}").tolist()
+
+        #! DUMMY DATA
+        instruct_embedding = [-5.1, 2.9, 0.8, 7.9, 3.1] # fruit
+        embedding_vector = [1.5, -0.4, 7.2, 19.6, 20.2] # cat
+        #! DUMMY DATA
+
         data = {
             # Transcriptions
             "timestamp": message.created_at,
@@ -178,16 +214,17 @@ try:
 
             # Vectors
             "embedding_model": embedding_model,
-            "embedding": embedding_vector,
+            "embedding_dim": None,
+            "embedding": None,
             "index_type": "StreamingDiskAnn", #* change accordingly
             "index_measurement": "vector_cosine_ops", #* change accordingly
         }
 
-        try:
-            # TODO: Call llm/langgraph for response and conditional querying
-            results = db.query_vector(query=instruct_embedding)
-            await message.reply(f"These are the results: \n\n {results}", mention_author=True)
+        # TODO: Call llm/langgraph for response and conditional querying
+        results = db.query_vector(query=instruct_embedding)
+        await message.reply(f"These are the results: \n\n {results}", mention_author=True)
 
+        try:
             db.add_record(table=TranscriptionsVectors,data=data)
             # save in all-data csv
             write_to_csv(full_file_path=all_records_csv_path, 
@@ -205,8 +242,8 @@ except KeyboardInterrupt:
     # Clear short term memory data/rows
     # Decide if you want this table without checking. Recommend not deleting until all data is saved properly in csv or in other form(s).
     #! TODO test this
-    tablename = "vectors"
-    clean_table(db=db, tablename=tablename, truncate=True)
+    # tablename = "vectors"
+    # clean_table(db=db, tablename=tablename, truncate=True)
 
     # stop compose container
     yaml_path = "db/compose.yaml"
