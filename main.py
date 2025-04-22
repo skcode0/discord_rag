@@ -28,14 +28,14 @@ from tables import Base, Transcriptions, Vectors, TranscriptionsVectors
 # --------------------------
 # start Docker Compose command for DBs (only short term)
 # --------------------------
-# command = ["docker", "compose", "db/compose.yaml", "up", "-d"]
+command = ["docker", "compose", "db/compose.yaml", "up", "-d"]
 
-# try:
-#     result = subprocess.run(command, check=True, capture_output=True, text=True)
-#     print("Docker Compose Output:\n", result.stdout)
-# except subprocess.CalledProcessError as e:
-#     print("Error running docker-compose:", e.stderr)
-#     sys.exit(1)
+try:
+    result = subprocess.run(command, check=True, capture_output=True, text=True)
+    print("Docker Compose Output:\n", result.stdout)
+except subprocess.CalledProcessError as e:
+    print("Error running docker-compose:", e.stderr)
+    sys.exit(1)
 
 # --------------------------
 # Load in environment variables
@@ -127,18 +127,18 @@ all_records_csv_path = name_and_write_to_csv(file_path=storage_path,
 # Create database (+ postgres extensions) and table if not present
 # --------------------------
 # short-term long-term db
-# db = PostgresDataBase(password=pg_password,
-#                       db=short_db_name,
-#                       port=short_port)
+db = PostgresDataBase(password=pg_password,
+                      db=short_db_name,
+                      port=short_port)
 
-# url = db.make_db()
-# db.enable_vectors()
+url = db.make_db()
+db.enable_vectors()
 
 
-# # create table(s)
-# Base.metadata.create_all(db.engine) # prevents duplicate tables
+# create table(s)
+Base.metadata.create_all(db.engine) # prevents duplicate tables
 
-# Session = sessionmaker(bind=db.engine)
+Session = sessionmaker(bind=db.engine)
 
 # --------------------------
 # Store Discord messages as embeddings (+ csv files) and call llm with rag to answer user inputs

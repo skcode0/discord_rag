@@ -24,7 +24,14 @@ Discord messages are saved as vector embeddings and retrieved using StreamingDis
 - After given permission, Bot should be in the server (offline)
 - After you put the intial code, you'll need to put in token to actually run the bot. You can find that token by going to the `Bot` tab again, clicking on `Reset Token`, do authentication, and `Copy` token. Paste it inside `.env` file and name it `DISCORD_TOKEN`. 
 
+<h1>IMPORTANT</h1>
+
+- Create `.env` file. Use `.env_template` for reference.
+- Create `storage` folder inside `db` folder.
+
+
 <h1>Tools used:</h1>
+
 - Docker
 - discord.py
 - PostgreSQL + pgAdmin 4
