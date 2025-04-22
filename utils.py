@@ -222,15 +222,22 @@ class PostgresDataBase:
 # --------------------------
 # Folder/File Saving and Logging
 # --------------------------
-def create_program_session_dir() -> None:
+def create_program_session_dir() -> str:
     """
     Creates a folder with a program session name.
+
+    Returns program session name
     """
     path_dir = './db/storage'
 
     load_dotenv()
 
     session_name = os.environ.get('PROGRAM_SESSION')
+    
+    # session name exists but actual folder doesn't
+    
+    if not os.path.isdir(os.path.join(path_dir, session_name)):
+        session_name = ""
 
     if session_name:
         acceptable_ans = {"yes", "y", "no", "n"}
@@ -271,10 +278,44 @@ def create_program_session_dir() -> None:
                 session_name = check_dir(path_dir=path_dir,
                                          session_name=session_name)
     else:
-        session_name = create_session_name()
-        # for some reason, there may be existing session folders while PROGRAM_SESSION=''
-        session_name = check_dir(path_dir=path_dir,
-                                 session_name=session_name)
+        acceptable_ans = {"yes", "y", "no", "n"}
+        current_str = f"Would you like to create a custom name for the folder? type yes (y). If not, type no (n): "
+        ans = validate_ans(acceptable_ans=acceptable_ans,
+                           question=current_str)
+
+        if ans in {"yes", "y"}:
+            note_str = "Note that session name will be saved in lowercase letters. Also, if left empty, session name will be randomly generated alphanumeric string and today's date (ex. 'as30k1mm_3-27-2025'): "
+
+            session_name = input("Create a session name (for file saving). " + note_str).lower().strip()
+            
+            if session_name == "":
+                session_name = create_session_name()
+                # for some reason, there may be existing session folders while PROGRAM_SESSION=''
+                session_name = check_dir(path_dir=path_dir,
+                                         session_name=session_name)
+            else:
+                add_date = validate_ans(acceptable_ans=acceptable_ans,
+                                    question="Add today's date at the end (y,n)? ")
+                
+                if add_date in {"yes", "y"}:
+                    session_name = append_date(name=session_name)
+
+                validity_message = """
+                Your file name is invalid for windows file system. You CANNOT have:
+                    - special characters: <>:"/\\|?*
+                    - trailing spaces or periods
+                    - reserved Windows names (CON, PRN, AUX, NUL, COM1-COM9, LPT1-LPT9)
+                """
+                while not is_valid_windows_name(session_name):
+                    session_name = input(validity_message + "\nCreate a session name (for file saving). " + note_str).lower().strip()
+
+                session_name = check_dir(path_dir=path_dir,
+                                         session_name=session_name)  
+        else:
+            session_name = create_session_name()
+            # for some reason, there may be existing session folders while PROGRAM_SESSION=''
+            session_name = check_dir(path_dir=path_dir,
+                                    session_name=session_name)
 
     full_path = os.path.join(path_dir, session_name)
     if not os.path.isdir(full_path):
@@ -293,6 +334,8 @@ def create_program_session_dir() -> None:
             print(f"Current session changed: {os.environ.get('PROGRAM_SESSION')} --> {session_name}")
         else:
             print(f"Keeping program session name: {os.environ.get('PROGRAM_SESSION')}.")
+
+    return session_name
 
 
 def create_pickle_file(dir_path:str="/", filename:str="pickle", data:dict={}) -> None:
@@ -357,7 +400,7 @@ def validate_ans(acceptable_ans: Union[list, set], question: str) -> str:
     """
     Keep asking for valid user input.
 
-    - acceptable_ans: list/set of acceptable anser choices
+    - acceptable_ans: list/set of acceptable answer choices
     - question: question for user 
 
     Returns valid user input
@@ -549,6 +592,9 @@ def name_and_write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]] = {}
     
     if not session_name:
         session_name = os.environ.get('PROGRAM_SESSION')
+        #! fix. session_name doesn't seem to load when new/unnammed at first
+        #! Session name not getting updated. FIXXX
+        print(session_name)
 
         # unnamed session name will automatically get date appended
         if session_name == "":
@@ -850,7 +896,7 @@ def create_embedding(model_name: str,
         Creates vector embedding
         
         - model_name: name of embedding model
-        - input: input string that needs to be convereted to embedding
+        - input: input string that needs to be converted to embedding
 
         Returns NORMALIZED numpy array of vector embedding
     """

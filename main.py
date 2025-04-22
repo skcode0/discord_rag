@@ -8,7 +8,8 @@ from utils import (
     clean_table, 
     close_docker_compose, 
     get_detailed_instruct, 
-    create_embedding
+    create_embedding,
+    update_file_num_pkl
     )
 from sqlalchemy import create_engine, Index
 from sqlalchemy.orm import sessionmaker, mapped_column, Mapped
@@ -27,14 +28,14 @@ from tables import Base, Transcriptions, Vectors, TranscriptionsVectors
 # --------------------------
 # start Docker Compose command for DBs (only short term)
 # --------------------------
-command = ["docker", "compose", "db/compose.yaml", "up", "-d"]
+# command = ["docker", "compose", "db/compose.yaml", "up", "-d"]
 
-try:
-    result = subprocess.run(command, check=True, capture_output=True, text=True)
-    print("Docker Compose Output:\n", result.stdout)
-except subprocess.CalledProcessError as e:
-    print("Error running docker-compose:", e.stderr)
-    sys.exit(1)
+# try:
+#     result = subprocess.run(command, check=True, capture_output=True, text=True)
+#     print("Docker Compose Output:\n", result.stdout)
+# except subprocess.CalledProcessError as e:
+#     print("Error running docker-compose:", e.stderr)
+#     sys.exit(1)
 
 # --------------------------
 # Load in environment variables
@@ -68,53 +69,76 @@ program_session = os.environ.get('PROGRAM_SESSION')
 # --------------------------
 # For .csv data storage
 # --------------------------
-create_program_session_dir() # create session folder
+program_session = create_program_session_dir() # create session folder
 
 storage_path = './db/storage'
 
-# for rows that were not sucessfully added to db for some reason (ex. duplicates, inserting null in non-nullable column, etc.)
+# For rows that were not successfully added to db for some reason (ex. duplicates, inserting null in non-nullable column, etc.)
 not_added_file_name = "not_added.csv"
 # for recording all data
 all_file_name = "output.csv"
 
 acceptable_ans = ["yes", "y", "no", "n"]
-print("Following questions are for writing non-postgres-added data to csv.")
-add_date = validate_ans(acceptable_ans=acceptable_ans,
-                        question="Add date? Default is True. (y/n):")
-auto_increment = input(acceptable_ans=acceptable_ans,
-                       question="Add auto increment for file numbering? Default is False (y/n): ")
-not_added_csv_path = name_and_write_to_csv(file_path=storage_path,
-                                  session_name=program_session,
-                                  add_date = True,
-                                  auto_increment=False)
+print("Following questions are for writing data (in csv) that has failed to save in database.")
+date_input = validate_ans(acceptable_ans=acceptable_ans,
+                        question="Add date? (y/n):")
+if date_input in ["yes", "y"]:
+    add_date = True
+else:
+    add_date = False
 
-print("----------")
-print("Following questions are for writing all data to csv.")
-add_date = validate_ans(acceptable_ans=acceptable_ans,
-                        question="Add date? Default is True. (y/n):")
-auto_increment = input(acceptable_ans=acceptable_ans,
-                       question="Add auto increment for file numbering? Default is False (y/n): ")
-all_records_csv_path = name_and_write_to_csv(file_path=storage_path,
+increment_input = validate_ans(acceptable_ans=acceptable_ans,
+                       question="Add auto increment for file numbering? (y/n): ")
+if increment_input in ["yes", "y"]:
+    auto_increment = True
+else:
+    auto_increment = False
+
+not_added_csv_path = name_and_write_to_csv(file_path=storage_path,
+                                           file_name=not_added_file_name,
                                   session_name=program_session,
-                                  add_date = True,
-                                  auto_increment=False)
+                                  add_date = add_date,
+                                  auto_increment=auto_increment)
+
+# This is for saving data in csv regardless of whether data was successfully added to database or not. In other words, this is simply a backup save.
+print("----------")
+print("Following questions are for writing all data to csv (back-up file).")
+date_input = validate_ans(acceptable_ans=acceptable_ans,
+                        question="Add date? (y/n):")
+if date_input in ["yes", "y"]:
+    add_date = True
+else:
+    add_date = False
+
+increment_input = validate_ans(acceptable_ans=acceptable_ans,
+                       question="Add auto increment for file numbering? (y/n): ")
+if increment_input in ["yes", "y"]:
+    auto_increment = True
+else:
+    auto_increment = False
+
+all_records_csv_path = name_and_write_to_csv(file_path=storage_path,
+                                             file_name=all_file_name,
+                                  session_name=program_session,
+                                  add_date = add_date,
+                                  auto_increment=auto_increment)
 
 # --------------------------
 # Create database (+ postgres extensions) and table if not present
 # --------------------------
 # short-term long-term db
-db = PostgresDataBase(password=pg_password,
-                      db=short_db_name,
-                      port=short_port)
+# db = PostgresDataBase(password=pg_password,
+#                       db=short_db_name,
+#                       port=short_port)
 
-url = db.make_db()
-db.enable_vectors()
+# url = db.make_db()
+# db.enable_vectors()
 
 
-# create table(s)
-Base.metadata.create_all(db.engine) # prevents duplicate tables
+# # create table(s)
+# Base.metadata.create_all(db.engine) # prevents duplicate tables
 
-Session = sessionmaker(bind=db.engine)
+# Session = sessionmaker(bind=db.engine)
 
 # --------------------------
 # Store Discord messages as embeddings (+ csv files) and call llm with rag to answer user inputs
@@ -132,40 +156,48 @@ try:
         if message.author == bot.user:
             return
 
-        try:
-            # Create embedding
-            # Note: Some embedding models like 'intfloat/multilingual-e5-large-instruct' require instructions to be added to query. Documents don't need instructions.
-            task = "Given user's message query, retrieve relevant messages that answer the query."
-            instruct_query = get_detailed_instruct(query=message.content,
-                                                   task_description=task)
-            instruct_embedding = create_embedding(model_name=embedding_model,
-                                         input=instruct_query)
+        # Create embedding
+        # Note: Some embedding models like 'intfloat/multilingual-e5-large-instruct' require instructions to be added to query. Documents don't need instructions.
+        task = "Given user's message query, retrieve relevant messages that answer the query."
+        instruct_query = get_detailed_instruct(query=message.content,
+                                                task_description=task)
+        # for querying
+        instruct_embedding = create_embedding(model_name=embedding_model,
+                                              input=instruct_query)
+        
 
+        #! TODO: add date/time to embedding??
+        # for storage
+        embedding_vector = create_embedding(model_name=embedding_model,
+                                            input=message.content).tolist()
+        # Store messages as vectors in pg
+        data = {
+            # Transcriptions
+            "timestamp": message.created_at,
+            "speaker": message.author,
+            "text": message.content,
+
+            # Vectors
+            "embedding_model": embedding_model,
+            "embedding": embedding_vector,
+            "index_type": "StreamingDiskAnn", #* change accordingly
+            "index_measurement": "vector_cosine_ops", #* change accordingly
+        }
+
+        try:
             # TODO: Call llm/langgraph for response and conditional querying
             #! test
-            results = db.query_vector(qery=instruct_embedding)
-            await message.reply(f"These are the results: \n\n {results}", mention_author=True)
+            # results = db.query_vector(query=instruct_embedding)
+            # await message.reply(f"These are the results: \n\n {results}", mention_author=True)
 
-            # Store messages as vectors in pg
-            data = {
-                # Transcriptions
-                "timestamp": message.created_at,
-                "speaker": message.author,
-                "text": message.content,
+            await message.reply(f"Instruct Embedding: {instruct_embedding}", mention_author=True)
 
-                # Vectors
-                "embedding_model": embedding_model,
-                "embedding": create_embedding(model_name=embedding_model,
-                                              input=message.content),
-                "index_type": "StreamingDiskAnn", #* change accordingly
-                "index_measurement": "vector_cosine_ops", #* change accordingly
-            }
-
-            db.add_record(table=TranscriptionsVectors,data=data)
+            # db.add_record(table=TranscriptionsVectors,data=data)
             # save in all-data csv
             write_to_csv(full_file_path=all_records_csv_path, 
                         data=data)
         except Exception as e:
+            print("Error: ", e)
             # save in not-added csv
             write_to_csv(full_file_path=not_added_csv_path, 
                         data=data)
@@ -182,7 +214,7 @@ except KeyboardInterrupt:
 
     # stop compose container
     yaml_path = "db/compose.yaml"
-    close_docker_compose(compose_path=yaml_path)
+    # close_docker_compose(compose_path=yaml_path)
     
     raise
 

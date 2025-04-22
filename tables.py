@@ -4,7 +4,6 @@ from datetime import datetime
 from pgvector.sqlalchemy import Vector
 from dotenv import load_dotenv
 import os
-from utils import Base
 
 load_dotenv()
 
@@ -51,7 +50,7 @@ class Vectors(Base):
 
 # combined table: transcriptions + vectors
 class TranscriptionsVectors(Base):
-    __tablename__: "transcriptionsVectors"
+    __tablename__ = "transcriptionsVectors"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     timestamp: Mapped[datetime]
     speaker: Mapped[str]
