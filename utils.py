@@ -699,7 +699,7 @@ def update_file_num_pkl(dir_path: str = './',
             # any decimal numbers (ex. 3.1) will be turned to int
             file_num = int(file_num)
         except Exception as e:
-            print(e)
+            print("Error", e)
             file_name = base
             not_added.append(f)
             continue

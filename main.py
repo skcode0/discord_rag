@@ -145,6 +145,7 @@ Session = sessionmaker(bind=db.engine)
 
 #! DUMMY DATA
 emb = [
+        ["cat", [1.5, -0.4, 7.2, 19.6, 20.2]],
         ["dog", [1.7, -0.3, 6.9, 19.1, 21.1]],
         ["apple", [-5.2, 3.1, 0.2, 8.1, 3.5]],
         ["strawberry", [-4.9, 3.6, 0.9, 7.8, 3.6]],
@@ -203,7 +204,7 @@ try:
 
         #! DUMMY DATA
         instruct_embedding = [-5.1, 2.9, 0.8, 7.9, 3.1] # fruit
-        embedding_vector = [1.5, -0.4, 7.2, 19.6, 20.2] # cat
+        embedding_vector = [-5.1, 2.9, 0.8, 7.9, 3.1] # fruit
         #! DUMMY DATA
 
         data = {
@@ -214,8 +215,8 @@ try:
 
             # Vectors
             "embedding_model": embedding_model,
-            "embedding_dim": None,
-            "embedding": None,
+            "embedding_dim": embedding_dim,
+            "embedding": embedding_vector,
             "index_type": "StreamingDiskAnn", #* change accordingly
             "index_measurement": "vector_cosine_ops", #* change accordingly
         }
@@ -223,6 +224,7 @@ try:
         # TODO: Call llm/langgraph for response and conditional querying
         results = db.query_vector(query=instruct_embedding)
         await message.reply(f"These are the results: \n\n {results}", mention_author=True)
+        #TODO
 
         try:
             db.add_record(table=TranscriptionsVectors,data=data)
@@ -234,7 +236,6 @@ try:
             # save in not-added csv
             write_to_csv(full_file_path=not_added_csv_path, 
                         data=data)
-            pass
 
     bot.run(discord_token)
     
