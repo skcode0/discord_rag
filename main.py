@@ -27,7 +27,7 @@ from tables import Base, Transcriptions, Vectors, TranscriptionsVectors
 # --------------------------
 # start Docker Compose command for DBs (only short term)
 # --------------------------
-command = ["docker", "compose", "-f", "db/compose.yaml", "up", "-d" "short_term_db"]
+command = ["docker", "compose", "db/compose.yaml", "up", "-d"]
 
 try:
     result = subprocess.run(command, check=True, capture_output=True, text=True)

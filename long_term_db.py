@@ -11,11 +11,10 @@ from tables import Vectors
 import subprocess
 import sys
 
-# TODO: start docker compose
 # --------------------------
 # Docker Compose
 # --------------------------
-command = ["docker", "compose", "-f", "db/compose.yaml", "up", "-d" "long_term_db"]
+command = ["docker", "compose", "-f", "db/compose.yaml", "up", "-d", "long_term_db"]
 
 try:
     result = subprocess.run(command, check=True, capture_output=True, text=True)
