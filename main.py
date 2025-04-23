@@ -21,7 +21,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 import sys
 import asyncio
-from tables import Base, Transcriptions, Vectors, TranscriptionsVectors
+from tables import CombinedBase, Base, Transcriptions, Vectors, TranscriptionsVectors
 
 #* Note: This mostly uses synchronous functions. Async version of the code is in 'main_async.py'.
 
@@ -139,7 +139,9 @@ db.enable_vectors()
 
 
 # create table(s)
-Base.metadata.create_all(db.engine) # prevents duplicate tables
+CombinedBase.metadata.create_all(db.engine) # prevents duplicate tables
+
+#TODO: have to fix index stuff
 
 Session = sessionmaker(bind=db.engine)
 

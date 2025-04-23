@@ -65,7 +65,7 @@ class PostgresDataBase:
 
     def enable_vectors(self) -> None:
         """
-            Adds pgvectorscale to db
+        Adds pgvectorscale to db
         """
         with self.Session() as session:
             session.execute(text("CREATE EXTENSION IF NOT EXISTS vectorscale CASCADE;")) # CASCADE will automatically install pgvector
@@ -74,7 +74,7 @@ class PostgresDataBase:
 
     
 
-    def add_record(self, table: Type[Base], data: Dict[str, Any]) -> None:
+    def add_record(self, table: Type[DeclarativeBase], data: Dict[str, Any]) -> None:
         """
         Add record. If record could not be added, it will raise error. 
 
@@ -190,6 +190,7 @@ class PostgresDataBase:
                            logger: logging.Logger,
                            if_exists: str = "append",
                            index: bool = False,
+                           dtype = None,
                            method: Optional[Union[Literal['multi'], Callable]] = "multi") -> None:
         """
         Sends pandas dataframe/iterator to postgres. Also writes a log.
@@ -197,26 +198,26 @@ class PostgresDataBase:
         - df: dataframe
         - table_name: name of table to add data to
         - logger: for logging transactions
-        - if_exists: if table exists, "fail", "replace", or "append"
+        - if_exists: if table exists, "fail", "replace", or "append". Make sure to have a table with proper relationships/contraints or to_sql will create a new table. 
         - index: write index as column or not
         - method: method to insert rows (none = one per row; multi = multiple values in single INSERT; callable with signature (pd_table, conn, keys, data_iter))
 
         """
         try:
+            dtype = {"embedding": Vector(1024)}
             df.to_sql(
                 name=table_name,
                 con=self.engine,
                 if_exists=if_exists,
                 index=index,
-                method=method
+                method=method,
+                dtype=dtype
             )
             
-            logger.info(f"All data added to {table_name} successfully.")
-            logger.info("\n")
+            logger.info(f"All data added to {table_name} table successfully.\n")
 
         except Exception as e:
-            logger.exception("An error occurred while adding data to %s: %s", table_name, e)
-            logger.info("\n")
+            logger.error("An error occurred while adding data to %s table: %s\n", table_name, e)
             raise
 
 # --------------------------
@@ -755,17 +756,23 @@ def csv_to_pd(filepath: str,
     return df
 
 
-def str_to_vec(s: str) -> np.array:
+def str_to_vec(s: str, to_list=False) -> Union[np.ndarray, list]:
     """
     Convert to vector (numpy array)
 
     - s: string version of vectors
+    - to_list: convert to list or not
     
-    Returns numpy array vector
+    Returns numpy array or list
     """
     clean = s.strip("[]")
 
-    return np.fromstring(clean, sep=",")
+    result = np.fromstring(clean, sep=",")
+
+    if to_list:
+        result = result.tolist()
+
+    return result
 
 
 LogLevelStr = Literal["NOTSET", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]

@@ -1,4 +1,4 @@
-from sqlalchemy import Index, ForeignKey
+from sqlalchemy import Index, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, mapped_column, Mapped, relationship
 from datetime import datetime
 from pgvector.sqlalchemy import Vector
@@ -8,6 +8,7 @@ import os
 load_dotenv()
 
 embedding_dim = int(os.environ.get('EMBEDDING_DIM'))
+embedding_dim=1024
 
 # ref: https://www.youtube.com/watch?v=iwENqqgxm-g&list=PLKm_OLZcymWhtiM-0oQE2ABrrbgsndsn0&index=10
 
@@ -21,6 +22,15 @@ class Transcriptions(Base):
     speaker: Mapped[str]
     text: Mapped[str]
     vector: Mapped["Vectors"] = relationship(back_populates="transcription", uselist=False, cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "timestamp",
+            "speaker",
+            "text",
+            name="uq_transcriptions_timestamp_speaker_text"
+        ),
+    )
 
 
 class Vectors(Base):
@@ -45,12 +55,16 @@ class Vectors(Base):
             # postgresql_with={
 
             # } # index build parameters,
-            postgresql_ops={"embedding": "vector_cosine_ops"} # cosine similarity
+            postgresql_ops={"embedding": "vector_cosine_ops"}, # cosine similarity
         ),
     )
 
+
+class CombinedBase(DeclarativeBase):
+    pass
+
 # combined table: transcriptions + vectors
-class TranscriptionsVectors(Base):
+class TranscriptionsVectors(CombinedBase):
     __tablename__ = "transcriptionsVectors"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     timestamp: Mapped[datetime]
