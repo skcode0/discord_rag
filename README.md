@@ -31,10 +31,18 @@ Discord messages are saved as vector embeddings and retrieved using StreamingDis
 
 
 <h1>Tools used:</h1>
+Note: look at `requirements.txt` to see all the installed packages.
 
 - Docker
 - discord.py
 - PostgreSQL + pgAdmin 4
 - SQLAlchemy + psycopg(3)
 - PostgreSQL extensions: pgvector (vector) + pgvectorscale (StreamingDiskAnn)
+- SonyFlake
+- Pandas/Numpy
+- Hugging Face
+- PyTorch
+- Langgraph
+- asyncio
+
 
