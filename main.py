@@ -234,33 +234,39 @@ class MyBot(commands.Bot):
         }
 
         # TODO: Call llm/langgraph for response and conditional querying
-        results = db.query_vector(query=instruct_embedding)
-        await message.reply(f"These are the results: \n {results}", mention_author=True)
+        #! TODO: fix logic here on how to handle message.reply error and db/file saving
+        try:
+            results = db.query_vector(query=instruct_embedding)
+            await message.reply(f"These are the results: \n {results}", mention_author=True)
+
+            try:
+                db.add_record(table=TranscriptionsVectors,data=data)
+                # save in all-data csv
+                write_to_csv(full_file_path=all_records_csv_path, 
+                            data=data)
+            except Exception as e:
+                print("Error: ", e)
+                # save in not-added csv
+                write_to_csv(full_file_path=not_added_csv_path, 
+                            data=data)  
+        except Exception as e:
+            print(e)
         #TODO
 
-        try:
-            db.add_record(table=TranscriptionsVectors,data=data)
-            # save in all-data csv
-            write_to_csv(full_file_path=all_records_csv_path, 
-                        data=data)
-        except Exception as e:
-            print("Error: ", e)
-            # save in not-added csv
-            write_to_csv(full_file_path=not_added_csv_path, 
-                        data=data)    
+  
     
     # custom clean up when KeyboardInterrupted
     # https://stackoverflow.com/questions/69682471/how-do-i-gracefully-handle-ctrl-c-and-shutdown-discord-py-bot
     async def async_cleanup(self):
         # Clear short term memory data/rows
-        # Decide if you want this table without checking. Recommend not deleting until all data is saved properly in csv or in other form(s).
-        #! TODO test this
-        # tablename = "vectors"
-        # clean_table(db=db, tablename=tablename, truncate=True)
+        # Recommend not deleting until all data is saved properly in csv or in other form(s).
+        #! Change table name as needed
+        # tablename = "transcriptionsvectors"
+        # clean_table(db=db, tablename=tablename, truncate=False)
 
         # stop compose container
         yaml_path = "db/compose.yaml"
-        close_docker_compose(compose_path=yaml_path)
+        close_docker_compose(compose_path=yaml_path, down=False)
     
     async def close(self):
         await self.async_cleanup()

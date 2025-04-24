@@ -89,4 +89,10 @@ class TranscriptionsVectors(CombinedBase):
             # } # index build parameters,
             postgresql_ops={"embedding": "vector_cosine_ops"} # cosine similarity
         ),
+        UniqueConstraint(
+            "timestamp",
+            "speaker",
+            "text",
+            name="uq_transcriptions_timestamp_speaker_text"
+        ),
     )

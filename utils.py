@@ -118,6 +118,7 @@ class PostgresDataBase:
         # <=> is cosine DISTANCE (1 - cosine similarity); lower the distance, the better
         # Note: pgvectorscale currently supports: cosine distance (<=>) queries, for indices created with vector_cosine_ops; L2 distance (<->) queries, for indices created with vector_l2_ops; and inner product (<#>) queries, for indices created with vector_ip_ops. This is the same syntax used by pgvector.
         sql = ""
+        #! Change table name(s) as needed
         if join:
             sql = text("""
                         WITH relaxed_results AS MATERIALIZED (
@@ -143,7 +144,7 @@ class PostgresDataBase:
                             speaker,
                             text,
                             embedding <=> :embedding AS distance
-                        FROM transcriptionsVectors
+                        FROM transcriptionsvectors
                         ORDER BY distance
                         LIMIT :limit)
                     
@@ -151,14 +152,14 @@ class PostgresDataBase:
                         FROM relaxed_results 
                         ORDER BY distance;
                     """)
-        
+
         params = {
             'embedding': str(query),  # seems like vector embedding needs to be passed in as string
             'limit': top_k
         }
 
         with self.Session() as session:
-            # https://github.com/timescale/pgvectorscale/blob/main/README.md?utm_source=chatgpt.com
+            # https://github.com/timescale/pgvectorscale/blob/main/README.md?utm_source
             session.execute(text(f"SET diskann.query_search_list_size = {search_list_size}"))
             session.execute(text(f"SET diskann.query_rescore = {rescore}"))
 
