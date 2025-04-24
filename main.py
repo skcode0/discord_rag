@@ -14,14 +14,14 @@ from utils import (
 from sqlalchemy import create_engine, Index
 from sqlalchemy.orm import sessionmaker, mapped_column, Mapped
 from pgvector.sqlalchemy import Vector
-from datetime import datetime
+from datetime import datetime, timezone
 import subprocess
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 import sys
-import asyncio
 from tables import CombinedBase, Base, Transcriptions, Vectors, TranscriptionsVectors
+from sonyflake import SonyFlake
 
 #* Note: This mostly uses synchronous functions. Async version of the code is in 'main_async.py'.
 
@@ -145,6 +145,11 @@ CombinedBase.metadata.create_all(db.engine) # prevents duplicate tables
 
 Session = sessionmaker(bind=db.engine)
 
+# pk generation 
+#! Change start_date, machine_id if necessary
+start_time = datetime(2025,1,1,tzinfo=timezone.utc)
+sf = SonyFlake(start_time=start_time, machine_id=lambda: 1)
+
 #! DUMMY DATA
 emb = [
         ["cat", [1.5, -0.4, 7.2, 19.6, 20.2]],
@@ -155,14 +160,19 @@ emb = [
         ["car",[81.6, -72.1, 16, -20.2, 102]]
 ]
 
+snowflake_id = [7320991239237537792, 7320991239237537793, 7320991239237537794, 7320991239237537795, 7320991239237537796, 7320991239237537797]
+
 for i in range(len(emb)):
     data = {
                 # Transcriptions
+                "trans_id": snowflake_id[i],
                 "timestamp": datetime.datetime.now(),
+                "timzone": "CT", #* change accordinly,
                 "speaker": f"user_{i}",
                 "text": emb[i][0],
 
                 # Vectors
+                "vec_id": sf.next_id(),
                 "embedding_model": embedding_model,
                 "embedding_dim": embedding_dim,
                 "embedding": emb[i][1],
@@ -211,11 +221,14 @@ try:
 
         data = {
             # Transcriptions
+            "trans_id": message.id, # snowflake id
             "timestamp": message.created_at,
+            "timzone": "CT", #* change accordinly
             "speaker": message.author,
             "text": message.content,
 
             # Vectors
+            "vec_id": sf.next_id(),
             "embedding_model": embedding_model,
             "embedding_dim": embedding_dim,
             "embedding": embedding_vector,

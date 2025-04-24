@@ -24,7 +24,7 @@ class Client(commands.Bot):
         if message.content.startswith("hi"):
             time = message.created_at
             formatted_timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-            await message.channel.send(f"hi there, {message.author}. Created at {formatted_timestamp}")
+            await message.channel.send(f"hi there, {message.author}. Created at {formatted_timestamp}. Message id: {message.id}")
     
     async def on_reaction_add(self, reaction, user):
         await reaction.message.channel.send('You reacted')

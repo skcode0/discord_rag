@@ -1,4 +1,4 @@
-from sqlalchemy import Index, ForeignKey, UniqueConstraint
+from sqlalchemy import Index, ForeignKey, UniqueConstraint, BigInteger
 from sqlalchemy.orm import DeclarativeBase, mapped_column, Mapped, relationship
 from datetime import datetime
 from pgvector.sqlalchemy import Vector
@@ -17,8 +17,9 @@ class Base(DeclarativeBase):
 
 class Transcriptions(Base):
     __tablename__ = "transcriptions"
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     timestamp: Mapped[datetime]
+    timezone: Mapped[str] = mapped_column(nullable=True)
     speaker: Mapped[str]
     text: Mapped[str]
     vector: Mapped["Vectors"] = relationship(back_populates="transcription", uselist=False, cascade="all, delete-orphan")
@@ -36,7 +37,7 @@ class Transcriptions(Base):
 class Vectors(Base):
     # Reference: https://www.youtube.com/watch?v=iwENqqgxm-g&list=PLKm_OLZcymWhtiM-0oQE2ABrrbgsndsn0
     __tablename__ = "vectors"
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     embedding_model: Mapped[str]
     embedding_dim: Mapped[int]
     embedding = mapped_column(Vector(embedding_dim))
@@ -66,8 +67,9 @@ class CombinedBase(DeclarativeBase):
 # combined table: transcriptions + vectors
 class TranscriptionsVectors(CombinedBase):
     __tablename__ = "transcriptionsVectors"
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     timestamp: Mapped[datetime]
+    timezone: Mapped[str] = mapped_column(nullable=True)
     speaker: Mapped[str]
     text: Mapped[str]
 

@@ -182,7 +182,7 @@ class PostgresDataBase:
         with self.Session() as session:
             with session.begin():
                 session.execute(text(f"TRUNCATE TABLE {tablename};"))
-        
+
 
     def pandas_to_postgres(self, 
                            df: pd.DataFrame,
@@ -200,6 +200,7 @@ class PostgresDataBase:
         - logger: for logging transactions
         - if_exists: if table exists, "fail", "replace", or "append". Make sure to have a table with proper relationships/contraints or to_sql will create a new table. 
         - index: write index as column or not
+        - dtype: dtype of column(s)
         - method: method to insert rows (none = one per row; multi = multiple values in single INSERT; callable with signature (pd_table, conn, keys, data_iter))
 
         """

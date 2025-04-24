@@ -1,6 +1,6 @@
 from utils import csv_to_pd, str_to_vec, setLogger, setLogHandler
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timezone
 from utils import PostgresDataBase
 from dotenv import load_dotenv
 import os
@@ -8,7 +8,6 @@ import subprocess
 import sys
 from tables import Base
 from sqlalchemy.orm import sessionmaker
-from pgvector import Vector
 
 # --------------------------
 # Docker Compose
@@ -77,18 +76,26 @@ except Exception as e:
 # Process and save data to db
 # --------------------------
 #! Change to correct table names/cols if necessary
-trans_cols = ['timestamp', 'speaker', 'text']
-vectors_cols = ['embedding_model', 'embedding_dim', 'embedding', 'index_type', 'index_measurement']
+trans_cols = ['id', 'timestamp', 'timezone', 'speaker', 'text']
+vectors_cols = ['vec_id', 'id', 'embedding_model', 'embedding_dim', 'embedding', 'index_type', 'index_measurement']
 
 if isinstance(df, pd.DataFrame):
     # str to int
     df['embedding_dim'] = df['embedding_dim'].astype(int)
     # str to vector
     df['embedding'] = df['embedding'].apply(str_to_vec, args=(False,))
+    # change col name
+    df = df.rename(columns={'trans_id': 'id'})
 
     # split df
     trans_df = df[trans_cols]
     vectors_df = df[vectors_cols]
+
+    # vectors fk
+    vectors_df = vectors_df.rename(columns={'id': 'transcription_id'})
+    # vectors pk
+    vectors_df = vectors_df.rename(columns={'vec_id': 'id'})
+    
     try:
         # transcriptions
         db.pandas_to_postgres(
@@ -114,10 +121,17 @@ else: # iterator
         chunk['embedding_dim'] = chunk['embedding_dim'].astype(int)
         # str to vector
         chunk['embedding'] = chunk['embedding'].apply(str_to_vec, args=(True,))
+        # change col name
+        chunk = chunk.rename(columns={'trans_id': 'id'})
 
         # split df
         trans_chunk = chunk[trans_cols]
         vectors_chunk = chunk[vectors_cols]
+
+        # vectors fk
+        vectors_chunk = vectors_chunk.rename(columns={'id': 'transcription_id'})
+        # vectors pk
+        vectors_chunk = vectors_chunk.rename(columns={'vec_id': 'id'})
 
         logger.info(f"Chunk {i}: ")
         try:
@@ -127,6 +141,10 @@ else: # iterator
                 table_name="transcriptions",
                 logger=logger
             )
+        except Exception as e:
+            print(e)
+
+        try:
             # vectors
             db.pandas_to_postgres(
                 df=vectors_chunk,
