@@ -188,20 +188,15 @@ except:
 # --------------------------
 # Store Discord messages as embeddings (+ csv files) and call llm with rag to answer user inputs
 # --------------------------
-try:
-    bot = commands.Bot(command_prefix="/", intents=discord.Intents.all())
-
-    @bot.event
-    async def on_ready():
+class MyBot(commands.Bot):
+    async def on_ready(self):
         print(f"Logged on as {bot.user}!")
 
-    @bot.event
-    async def on_message(message):
+    async def on_message(self, message):
         # ignore replaying to itself
         if message.author == bot.user:
             return
-
-
+        
         # Create embedding
         # Note: Some embedding models like 'intfloat/multilingual-e5-large-instruct' require instructions to be added to query. Documents don't need instructions.
         task = "Given user's message query, retrieve relevant messages that answer the query."
@@ -252,22 +247,25 @@ try:
             print("Error: ", e)
             # save in not-added csv
             write_to_csv(full_file_path=not_added_csv_path, 
-                        data=data)
-
-    bot.run(discord_token)
-
-#! FIX: doesn't raise error due due discord's run
-except KeyboardInterrupt as e:
-    # Clear short term memory data/rows
-    # Decide if you want this table without checking. Recommend not deleting until all data is saved properly in csv or in other form(s).
-    #! TODO test this
-    # tablename = "vectors"
-    # clean_table(db=db, tablename=tablename, truncate=True)
-
-    # stop compose container
-    yaml_path = "db/compose.yaml"
-    close_docker_compose(compose_path=yaml_path)
+                        data=data)    
     
-    raise
+    # custom clean up when KeyboardInterrupted
+    # https://stackoverflow.com/questions/69682471/how-do-i-gracefully-handle-ctrl-c-and-shutdown-discord-py-bot
+    async def async_cleanup(self):
+        # Clear short term memory data/rows
+        # Decide if you want this table without checking. Recommend not deleting until all data is saved properly in csv or in other form(s).
+        #! TODO test this
+        # tablename = "vectors"
+        # clean_table(db=db, tablename=tablename, truncate=True)
 
-# *Note: Adding data to long_term_db will be done in 'long_term_db.py'.
+        # stop compose container
+        yaml_path = "db/compose.yaml"
+        close_docker_compose(compose_path=yaml_path)
+    
+    async def close(self):
+        await self.async_cleanup()
+        await super().close()  # don't forget this!
+
+
+bot = MyBot(command_prefix="/", intents=discord.Intents.all())
+bot.run(discord_token)

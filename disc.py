@@ -28,6 +28,17 @@ class Client(commands.Bot):
     
     async def on_reaction_add(self, reaction, user):
         await reaction.message.channel.send('You reacted')
+    
+    # custom clean up when KeyboardInterrupted
+    # https://stackoverflow.com/questions/69682471/how-do-i-gracefully-handle-ctrl-c-and-shutdown-discord-py-bot
+    async def async_cleanup(self):
+        print("Cleaning up!")
+    
+    async def close(self):
+        # do your cleanup here
+        await self.async_cleanup()
+        
+        await super().close()  # don't forget this!
 
 intents = discord.Intents.default()
 intents.message_content = True
