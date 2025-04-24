@@ -93,10 +93,11 @@ class PostgresDataBase:
             with self.Session() as session: # auto-closes session
                 session.add(table(**data))
                 session.commit()
-        except Exception as e:
+        except DBAPIError as e:
+            err = format_db_error(e)
             session.rollback()
-            raise
-    
+            raise RuntimeError(err)
+
 
     def query_vector(self, 
                      query: List[Union[int, float]],
@@ -600,9 +601,6 @@ def name_and_write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]] = {}
     
     if not session_name:
         session_name = os.environ.get('PROGRAM_SESSION')
-        #! fix. session_name doesn't seem to load when new/unnammed at first
-        #! Session name not getting updated. FIXXX
-        print(session_name)
 
         # unnamed session name will automatically get date appended
         if session_name == "":

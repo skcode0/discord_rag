@@ -28,11 +28,12 @@ from sonyflake import SonyFlake
 # --------------------------
 # start Docker Compose command for DBs (only short term)
 # --------------------------
-command = ["docker", "compose", "db/compose.yaml", "up", "-d"]
+command = ["docker", "compose", "-f", "db/compose.yaml", "up", "-d"]
 
 try:
     result = subprocess.run(command, check=True, capture_output=True, text=True)
-    print("Docker Compose Output:\n", result.stdout)
+    if result.stdout.strip():
+        print("Docker Compose Output:\n", result.stdout)
 except subprocess.CalledProcessError as e:
     print("Error running docker-compose:", e.stderr)
     sys.exit(1)
@@ -131,8 +132,9 @@ all_records_csv_path = name_and_write_to_csv(file_path=storage_path,
 # --------------------------
 # short-term long-term db
 db = PostgresDataBase(password=pg_password,
-                      db=short_db_name,
-                      port=short_port)
+                      db_name=short_db_name,
+                      port=short_port,
+                      hide_parameters=True)
 
 url = db.make_db()
 db.enable_vectors()
@@ -159,25 +161,28 @@ emb = [
 
 snowflake_id = [7320991239237537792, 7320991239237537793, 7320991239237537794, 7320991239237537795, 7320991239237537796, 7320991239237537797]
 
-for i in range(len(emb)):
-    data = {
-                # Transcriptions
-                "trans_id": snowflake_id[i],
-                "timestamp": datetime.datetime.now(),
-                "timzone": "CT", #* change accordinly,
-                "speaker": f"user_{i}",
-                "text": emb[i][0],
+try:
+    for i in range(len(emb)):
+        data = {
+                    # Transcriptions
+                    "trans_id": snowflake_id[i],
+                    "timestamp": datetime.now(),
+                    "timezone": "CT", #* change accordinly,
+                    "speaker": f"user_{i}",
+                    "text": emb[i][0],
 
-                # Vectors
-                "vec_id": sf.next_id(),
-                "embedding_model": embedding_model,
-                "embedding_dim": embedding_dim,
-                "embedding": emb[i][1],
-                "index_type": "StreamingDiskAnn", #* change accordingly
-                "index_measurement": "vector_cosine_ops", #* change accordingly
-            }
-    
-    db.add_record(table=TranscriptionsVectors,data=data)
+                    # Vectors
+                    "vec_id": sf.next_id(),
+                    "embedding_model": embedding_model,
+                    "embedding_dim": embedding_dim,
+                    "embedding": emb[i][1],
+                    "index_type": "StreamingDiskAnn", #* change accordingly
+                    "index_measurement": "vector_cosine_ops", #* change accordingly
+                }
+        
+        db.add_record(table=TranscriptionsVectors,data=data)
+except:
+    pass
 #! DUMMY DATA
 
 # --------------------------
@@ -220,8 +225,8 @@ try:
             # Transcriptions
             "trans_id": message.id, # snowflake id
             "timestamp": message.created_at,
-            "timzone": "CT", #* change accordinly
-            "speaker": message.author,
+            "timezone": "CT", #* change accordinly
+            "speaker": str(message.author),
             "text": message.content,
 
             # Vectors
@@ -235,7 +240,7 @@ try:
 
         # TODO: Call llm/langgraph for response and conditional querying
         results = db.query_vector(query=instruct_embedding)
-        await message.reply(f"These are the results: \n\n {results}", mention_author=True)
+        await message.reply(f"These are the results: \n {results}", mention_author=True)
         #TODO
 
         try:
@@ -250,8 +255,9 @@ try:
                         data=data)
 
     bot.run(discord_token)
-    
-except KeyboardInterrupt:
+
+#! FIX: doesn't raise error due due discord's run
+except KeyboardInterrupt as e:
     # Clear short term memory data/rows
     # Decide if you want this table without checking. Recommend not deleting until all data is saved properly in csv or in other form(s).
     #! TODO test this

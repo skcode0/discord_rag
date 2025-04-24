@@ -65,13 +65,14 @@ class CombinedBase(DeclarativeBase):
 
 # combined table: transcriptions + vectors
 class TranscriptionsVectors(CombinedBase):
-    __tablename__ = "transcriptionsVectors"
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    __tablename__ = "transcriptionsvectors"
+    trans_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     timestamp: Mapped[datetime]
     timezone: Mapped[str] = mapped_column(nullable=True)
     speaker: Mapped[str]
     text: Mapped[str]
 
+    vec_id: Mapped[int] = mapped_column(BigInteger)
     embedding_model: Mapped[str]
     embedding_dim: Mapped[int]
     embedding = mapped_column(Vector(embedding_dim))
