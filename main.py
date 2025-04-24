@@ -137,12 +137,8 @@ db = PostgresDataBase(password=pg_password,
 url = db.make_db()
 db.enable_vectors()
 
-
 # create table(s)
 CombinedBase.metadata.create_all(db.engine) # prevents duplicate tables
-
-#TODO: have to fix index stuff
-
 Session = sessionmaker(bind=db.engine)
 
 # pk generation 

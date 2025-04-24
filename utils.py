@@ -205,7 +205,6 @@ class PostgresDataBase:
 
         """
         try:
-            dtype = {"embedding": Vector(1024)}
             df.to_sql(
                 name=table_name,
                 con=self.engine,

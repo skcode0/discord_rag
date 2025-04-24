@@ -8,6 +8,7 @@ import subprocess
 import sys
 from tables import Base
 from sqlalchemy.orm import sessionmaker
+from pgvector.sqlalchemy import Vector
 
 # --------------------------
 # Docker Compose
@@ -60,6 +61,8 @@ load_dotenv(override=True)
 password = os.environ.get('POSTGRES_PASSWORD')
 db_name = os.environ.get('LONG_TERM_DB')
 port = os.environ.get('LONG_TERM_HOST_PORT')
+embedding_dim = os.environ.get('EMBEDDING_DIM')
+embedding_dim = int(embedding_dim)
 
 db = PostgresDataBase(password=password,
                       db_name=db_name,
@@ -114,7 +117,8 @@ if isinstance(df, pd.DataFrame):
         db.pandas_to_postgres(
             df=vectors_df,
             table_name="vectors",
-            logger=logger
+            logger=logger,
+            dtype = {"embedding": Vector(embedding_dim)}
         )
         print("")
     except Exception as e:
@@ -153,7 +157,8 @@ else: # iterator
             db.pandas_to_postgres(
                 df=vectors_chunk,
                 table_name="vectors",
-                logger=logger
+                logger=logger,
+                dtype = {"embedding": Vector(embedding_dim)}
             )
         except Exception as e:
             print(e)
