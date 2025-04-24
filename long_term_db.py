@@ -49,8 +49,11 @@ logger.info(f"{datetime.now()}\n")
 
 path = "./db/storage/output_2025-04-22_1.csv"
 # either dataframe or TextFileReader (iteratable pandas chunks)
+#! Change chunksize if necessary
+chunksize = None
 df = csv_to_pd(filepath=path,
-               parse_dates=["timestamp"])
+               parse_dates=["timestamp"],
+               chunksize=chunksize)
 
 
 load_dotenv()
@@ -76,7 +79,7 @@ except Exception as e:
 # Process and save data to db
 # --------------------------
 #! Change to correct table names/cols if necessary
-trans_cols = ['id', 'timestamp', 'timezone', 'speaker', 'text']
+trans_cols = ['id', 'timestamp', 'timezone', 'speaker', 'text'] # id instead of trans_id because col name would have already changed to id.
 vectors_cols = ['vec_id', 'id', 'embedding_model', 'embedding_dim', 'embedding', 'index_type', 'index_measurement']
 
 if isinstance(df, pd.DataFrame):
@@ -95,7 +98,7 @@ if isinstance(df, pd.DataFrame):
     vectors_df = vectors_df.rename(columns={'id': 'transcription_id'})
     # vectors pk
     vectors_df = vectors_df.rename(columns={'vec_id': 'id'})
-    
+
     try:
         # transcriptions
         db.pandas_to_postgres(
@@ -113,6 +116,7 @@ if isinstance(df, pd.DataFrame):
             table_name="vectors",
             logger=logger
         )
+        print("")
     except Exception as e:
         print(e)
 else: # iterator
@@ -133,7 +137,7 @@ else: # iterator
         # vectors pk
         vectors_chunk = vectors_chunk.rename(columns={'vec_id': 'id'})
 
-        logger.info(f"Chunk {i}: ")
+        logger.info(f"Chunk {i} ({len(chunk)} rows): ")
         try:
             # transcriptions
             db.pandas_to_postgres(
@@ -157,10 +161,14 @@ else: # iterator
 # --------------------------
 # Stop docker compose
 # --------------------------
-# try:
-#     command = ["docker", "compose", "-f", "db/compose.yaml", "stop"]
-#     subprocess.run(command, check=True)
-#     print("Docker Compose stopped successfully.")
-# except Exception as e:
-#     print(f"Error stopping Docker Compose: {e}")
-#     raise
+try:
+    while True:
+        pass
+except KeyboardInterrupt:
+    try:
+        command = ["docker", "compose", "-f", "db/compose.yaml", "stop"] # 'down' deletes container and network
+        subprocess.run(command, check=True)
+        print("Docker Compose stopped successfully.")
+    except Exception as e:
+        print(f"Error stopping Docker Compose: {e}")
+        raise
