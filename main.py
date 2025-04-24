@@ -151,6 +151,7 @@ start_time = datetime(2025,1,1,tzinfo=timezone.utc)
 sf = SonyFlake(start_time=start_time, machine_id=lambda: 1)
 
 #! DUMMY DATA
+# https://weaviate.io/blog/vector-embeddings-explained
 emb = [
         ["cat", [1.5, -0.4, 7.2, 19.6, 20.2]],
         ["dog", [1.7, -0.3, 6.9, 19.1, 21.1]],
@@ -263,7 +264,7 @@ except KeyboardInterrupt:
 
     # stop compose container
     yaml_path = "db/compose.yaml"
-    # close_docker_compose(compose_path=yaml_path)
+    close_docker_compose(compose_path=yaml_path)
     
     raise
 

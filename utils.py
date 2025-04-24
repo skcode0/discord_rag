@@ -868,15 +868,22 @@ def clean_table(db: PostgresDataBase,
         print(f"Could not delete all rows from '{tablename}' table. Error: {e}")
 
 
-def close_docker_compose(compose_path: str = "db/compose.yaml") -> None:
+def close_docker_compose(compose_path: str = "db/compose.yaml", down: bool = True) -> None:
     """
     Closes docker compose container(s).
 
     - compose_path: path of docker compose yaml file
+    - down: should it be compose down or stop. If False, it will stop instead. Down will get rid of container and network.
 
     """
+    choice = ""
+    if down:
+        choice = "down"
+    else:
+        choice = "stop"
+
     try:
-        command = ["docker", "compose", "-f", compose_path, "down"]
+        command = ["docker", "compose", "-f", compose_path, choice]
         subprocess.run(command, check=True)
         print("Docker Compose stopped successfully.")
     except Exception as e:
