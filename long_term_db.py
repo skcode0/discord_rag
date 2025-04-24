@@ -66,7 +66,9 @@ embedding_dim = int(embedding_dim)
 
 db = PostgresDataBase(password=password,
                       db_name=db_name,
-                      port=port)
+                      port=port,
+                      echo=False,
+                      hide_parameters=True)
 
 url = db.make_db()
 db.enable_vectors()

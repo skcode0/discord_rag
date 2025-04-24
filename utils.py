@@ -34,16 +34,22 @@ class PostgresDataBase:
                  db_name: str,
                  port: int = 5432,
                  user: str = "postgres",
-                 host: str = "localhost"):
+                 host: str = "localhost",
+                 pool_size: int = 50,
+                 echo: bool = False,
+                 hide_parameters: bool = False):
         self.password = password 
         self.db_name = db_name
         self.port = port
         self.user = user
         self.host = host
+        self.pool_size = pool_size
+        self.echo = echo
+        self.hide_parameters = hide_parameters
 
         self.url = f'postgresql+psycopg://{self.user}:{self.password}@{self.host}:{self.port}/{self.db_name}'
 
-        self.engine = create_engine(self.url, pool_size=50, echo=False)
+        self.engine = create_engine(self.url, pool_size=self.pool_size, echo=self.echo, hide_parameters=self.hide_parameters)
         self.Session = sessionmaker(bind=self.engine)
 
 
