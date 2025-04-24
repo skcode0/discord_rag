@@ -41,7 +41,7 @@ except subprocess.CalledProcessError as e:
 # Load in environment variables
 # --------------------------
 # postgres
-load_dotenv()
+load_dotenv(override=True)
 pg_username = os.environ.get('POSTGRESS_USER')
 pg_password = os.environ.get('POSTGRES_PASSWORD')
 short_db_name = os.environ.get('SHORT_TERM_DB')

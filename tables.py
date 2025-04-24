@@ -5,10 +5,9 @@ from pgvector.sqlalchemy import Vector
 from dotenv import load_dotenv
 import os
 
-load_dotenv()
+load_dotenv(override=True)
 
 embedding_dim = int(os.environ.get('EMBEDDING_DIM'))
-embedding_dim=1024
 
 # ref: https://www.youtube.com/watch?v=iwENqqgxm-g&list=PLKm_OLZcymWhtiM-0oQE2ABrrbgsndsn0&index=10
 

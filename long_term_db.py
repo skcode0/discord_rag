@@ -56,7 +56,7 @@ df = csv_to_pd(filepath=path,
                chunksize=chunksize)
 
 
-load_dotenv()
+load_dotenv(override=True)
 password = os.environ.get('POSTGRES_PASSWORD')
 db_name = os.environ.get('LONG_TERM_DB')
 port = os.environ.get('LONG_TERM_HOST_PORT')

@@ -232,7 +232,7 @@ def create_program_session_dir() -> str:
     """
     path_dir = './db/storage'
 
-    load_dotenv()
+    load_dotenv(override=True)
 
     session_name = os.environ.get('PROGRAM_SESSION')
     
@@ -590,7 +590,7 @@ def name_and_write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]] = {}
 
     Returns full path of created file.
     """
-    load_dotenv()
+    load_dotenv(override=True)
     
     if not session_name:
         session_name = os.environ.get('PROGRAM_SESSION')
