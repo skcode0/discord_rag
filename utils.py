@@ -1,6 +1,6 @@
 from sqlalchemy_utils import database_exists, create_database
 from sqlalchemy import create_engine, text, Index
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker, mapped_column, Mapped
 from pgvector.sqlalchemy import Vector
 from sqlalchemy.engine import Engine
@@ -222,9 +222,10 @@ class PostgresDataBase:
             
             logger.info(f"All data added to {table_name} table successfully.\n")
 
-        except Exception as e:
-            logger.error("An error occurred while adding data to %s table: %s\n", table_name, e)
-            raise
+        except DBAPIError as e:
+            err = format_db_error(e)
+            logger.error("An error occurred while adding data to %s table: %s\n", table_name, err)
+            raise RuntimeError(err)
 
 # --------------------------
 # Folder/File Saving and Logging
@@ -849,6 +850,15 @@ def setLogHandler(log_dir: str = './',
 
     return handler
 
+def format_db_error(e: DBAPIError) -> str:
+    """
+    Formats DBAPIError for logging
+
+    Returns select error message.
+    """
+    orig = e.orig
+    cls = f"{orig.__class__.__module__}.{orig.__class__.__name__}"
+    return f"({cls}) {orig}"
 
 # --------------------------
 # Handling shutdown
