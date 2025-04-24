@@ -234,23 +234,28 @@ class MyBot(commands.Bot):
         }
 
         # TODO: Call llm/langgraph for response and conditional querying
-        #! TODO: fix logic here on how to handle message.reply error and db/file saving
+        #! prob need to change logic here
         try:
             results = db.query_vector(query=instruct_embedding)
+        except Exception as e:
+            results = "Error getting results"
+        
+        try:
             await message.reply(f"These are the results: \n {results}", mention_author=True)
-
-            try:
-                db.add_record(table=TranscriptionsVectors,data=data)
-                # save in all-data csv
-                write_to_csv(full_file_path=all_records_csv_path, 
-                            data=data)
-            except Exception as e:
-                print("Error: ", e)
-                # save in not-added csv
-                write_to_csv(full_file_path=not_added_csv_path, 
-                            data=data)  
         except Exception as e:
             print(e)
+            await message.reply("Error getting results", mention_author=True)
+
+        try:
+            db.add_record(table=TranscriptionsVectors,data=data)
+            # save in all-data csv
+            write_to_csv(full_file_path=all_records_csv_path, 
+                        data=data)
+        except Exception as e:
+            print("Error: ", e)
+            # save in not-added csv
+            write_to_csv(full_file_path=not_added_csv_path, 
+                        data=data)  
         #TODO
 
   
