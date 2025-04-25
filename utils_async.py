@@ -57,34 +57,40 @@ class AsyncPostgresDataBase:
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
 
     
-    def make_db(self) -> str:
+    async def make_db(self) -> str:
         """
         If database doesn't exist, create one.
         Reference: Connect to PostgreSQL Using SQLAlchemy & Python (https://www.youtube.com/watch?v=neW9Y9xh4jc)
 
         Returns postgres url
         """
-        if not database_exists(self.url):
-            create_database(self.url)
-            print(f"Database {self.db_name} has been sucessfully created.")
-        else:
-            print(f"The database with '{self.db_name}' name already exists.")
-        
-        return self.url
-    
+        async with self.engine.connect() as conn:
+            exists = await conn.run_sync(
+                lambda sync_conn: database_exists(self.url)
+            )
 
-    def enable_vectors(self) -> None:
+            if not exists:
+                await conn.run_sync(
+                    lambda sync_conn: create_database(self.url)
+                )
+                print(f"Database {self.db_name} has been sucessfully created.")
+            else:
+                print(f"The database with '{self.db_name}' name already exists.")
+            
+            return self.url
+    
+        
+    async def enable_vectors(self) -> None:
         """
         Adds pgvectorscale to db
         """
-        with self.Session() as session:
-            session.execute(text("CREATE EXTENSION IF NOT EXISTS vectorscale CASCADE;")) # CASCADE will automatically install pgvector
-            session.commit()
+        async with self.Session() as session:
+            await session.execute(text("CREATE EXTENSION IF NOT EXISTS vectorscale CASCADE;")) # CASCADE will automatically install pgvector
+            await session.commit()
         print("Vectorscale enabled.")
 
     
-
-    def add_record(self, table: Type[DeclarativeBase], data: Dict[str, Any]) -> None:
+    async def add_record(self, table: Type[DeclarativeBase], data: Dict[str, Any]) -> None:
         """
         Add record. If record could not be added, it will raise error. 
 
@@ -92,18 +98,17 @@ class AsyncPostgresDataBase:
         - data: record data. If the data dict's keys don't have the same name as the table name or there's more keys than column names, it will raise error. If there are less keys than columns, then depending on whether the column is nullable or not, it will add null or raise (IntegrityError) error.
         
         """
-
         try:
-            with self.Session() as session: # auto-closes session
-                session.add(table(**data))
-                session.commit()
+            async with self.Session() as session: # auto-closes session
+                await session.add(table(**data))
+                await session.commit()
         except DBAPIError as e:
+            await session.rollback()
             err = format_db_error(e)
-            session.rollback()
             raise RuntimeError(err)
 
 
-    def query_vector(self, 
+    async def query_vector(self, 
                      query: List[Union[int, float]],
                      join: bool = False,
                      search_list_size: int=100,
@@ -162,40 +167,40 @@ class AsyncPostgresDataBase:
             'limit': top_k
         }
 
-        with self.Session() as session:
+        async with self.Session() as session:
             # https://github.com/timescale/pgvectorscale/blob/main/README.md?utm_source
-            session.execute(text(f"SET diskann.query_search_list_size = {search_list_size}"))
-            session.execute(text(f"SET diskann.query_rescore = {rescore}"))
+            await session.execute(text(f"SET diskann.query_search_list_size = {search_list_size}"))
+            await session.execute(text(f"SET diskann.query_rescore = {rescore}"))
 
-            result = session.execute(sql, params)
-            rows = result.fetchall()
+            result = await session.execute(sql, params)
+            rows = await result.fetchall()
             columns = result.keys()
         
         return [dict(zip(columns, row)) for row in rows]
 
-
-    def delete_all_rows(self, tablename) -> None:
+    
+    async def delete_all_rows(self, tablename) -> None:
         """
         Deletes all rows in a table. Table won't be deleted. Slower than TRUNCATE because it deletes row by row. However, it's safer for data integrity and triggers.
         
         """
-        with self.Session() as session:
-            with session.begin():
-                session.execute(text(f"DELETE FROM {tablename};"))
+        async with self.Session() as session:
+            async with session.begin():
+                await session.execute(text(f"DELETE FROM {tablename};"))
 
 
-    def truncate_all_rows(self, tablename) -> None:
+    async def truncate_all_rows(self, tablename) -> None:
         """
         Truncates all rows in a table. Table won't be deleted. Faster than DELETE but can be harder to log or rollback. 
 
         - tablename: name of table
         
         """
-        with self.Session() as session:
-            with session.begin():
-                session.execute(text(f"TRUNCATE TABLE {tablename};"))
+        async with self.Session() as session:
+            async with session.begin():
+                await session.execute(text(f"TRUNCATE TABLE {tablename};"))
 
-
+    #TODO: async
     def pandas_to_postgres(self, 
                            df: pd.DataFrame,
                            table_name: str,
@@ -233,7 +238,7 @@ class AsyncPostgresDataBase:
             logger.error("An error occurred while adding data to %s table: %s\n", table_name, err)
             raise RuntimeError(err)
         
-
+    #TODO: async
     def postgres_to_csv(self, 
                         table_name: str, 
                         output_path: str,
@@ -274,7 +279,7 @@ Your file name is invalid for windows file system. You CANNOT have:
 - trailing spaces or periods
 - reserved Windows names (CON, PRN, AUX, NUL, COM1-COM9, LPT1-LPT9)
 """
-
+#TODO: async
 def create_program_session_dir() -> str:
     """
     Creates a folder with a program session name.
@@ -378,7 +383,7 @@ def create_program_session_dir() -> str:
 
     return session_name
 
-
+#TODO: async
 def create_pickle_file(dir_path:str="/", filename:str="pickle", data:dict={}) -> None:
     """
     Create pickle file.
@@ -396,7 +401,7 @@ def create_pickle_file(dir_path:str="/", filename:str="pickle", data:dict={}) ->
     with open(os.path.join(dir_path, filename), 'wb') as file:
         pickle.dump(data, file)
 
-
+#TODO: async???
 def check_filename(filename:str, correct_ext:str) -> str:
     """
     Checks if file name is valid.
@@ -436,7 +441,7 @@ def create_session_name(str_len: int = 8) -> str:
 
         return session_name
 
-
+#TODO: async???
 def validate_ans(acceptable_ans: Union[list, set], question: str) -> str:
     """
     Keep asking for valid user input.
@@ -500,7 +505,7 @@ def is_valid_windows_name(name:str) -> bool:
 
     return True
 
-
+#TODO: async???
 def check_dir(path_dir:str, session_name:str) -> str:
     """
     Check if folder already exist
@@ -534,7 +539,7 @@ def check_dir(path_dir:str, session_name:str) -> str:
         
     return session_name
 
-
+#TODO: async
 def write_to_csv(full_file_path: str, 
                  data: Union[Dict[str, Any], List[Dict[str, Any]]]) -> None:
     """
@@ -601,7 +606,7 @@ def write_to_csv(full_file_path: str,
         else:
             writer.writerows(data) # multiple
 
-
+#TODO: async
 def name_and_write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]] = {},
                     file_path: str = "./db/storage",
                     file_name: str = "output.csv",
@@ -704,7 +709,7 @@ def name_and_write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]] = {}
 
     return full_path
 
-
+#TODO: async
 def update_file_num_pkl(dir_path: str = './',
                         delimiter: str = "_") -> str:
     """
@@ -756,7 +761,7 @@ def update_file_num_pkl(dir_path: str = './',
 
     return pkl_file_path
         
-
+#TODO: async
 def csv_to_pd(filepath: str, 
               chunksize: Optional[int] = None,
               parse_dates: Union[
@@ -805,7 +810,7 @@ def str_to_vec(s: str, to_list=False) -> Union[np.ndarray, list]:
 
     return result
 
-
+#TODO: async???
 LogLevelStr = Literal["NOTSET", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 LogLevelInt = Literal[0, 10, 20, 30, 40, 50]
 LogLevel = Union[LogLevelStr, LogLevelInt]
@@ -834,7 +839,7 @@ def setLogger(name: str = __name__,
 
     return logger
 
-
+#TODO: async???
 def setLogHandler(log_dir: str = './',
                   log_filename: str = 'log.log',
                   mode: str = 'a',
@@ -874,6 +879,7 @@ def setLogHandler(log_dir: str = './',
 
     return handler
 
+
 def format_db_error(e: DBAPIError) -> str:
     """
     Formats DBAPIError for logging
@@ -887,6 +893,7 @@ def format_db_error(e: DBAPIError) -> str:
 # --------------------------
 # Handling shutdown
 # --------------------------
+#TODO: async
 def clean_table(db: PostgresDataBase, 
                 tablename: str,
                 truncate: bool = True) -> None:
@@ -906,7 +913,7 @@ def clean_table(db: PostgresDataBase,
     except Exception as e:
         print(f"Could not delete all rows from '{tablename}' table. Error: {e}")
 
-
+#TODO: async???
 def close_docker_compose(compose_path: str = "db/compose.yaml", down: bool = True) -> None:
     """
     Closes docker compose container(s).
@@ -966,6 +973,7 @@ def get_detailed_instruct(query: str,
     """
     return f'Instruct: {task_description}\nQuery: {query}'
 
+#TODO: async
 def create_embedding(model_name: str, 
                      input: str) -> np.ndarray:
     """
