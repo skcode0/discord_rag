@@ -2,15 +2,17 @@ import os
 from utils import (
     PostgresDataBase, 
     create_program_session_dir, 
-    name_and_write_to_csv, 
-    validate_ans, 
+    name_and_write_to_csv,
     write_to_csv, 
     clean_table, 
     close_docker_compose, 
     get_detailed_instruct, 
     create_embedding,
-    update_file_num_pkl
+    input_to_bool,
+    is_valid_windows_name,
+    windows_filename_validity_message,
     )
+from pathlib import Path 
 from sqlalchemy import create_engine, Index
 from sqlalchemy.orm import sessionmaker, mapped_column, Mapped
 from pgvector.sqlalchemy import Vector
@@ -79,23 +81,14 @@ not_added_file_name = "not_added.csv"
 # for recording all data
 all_file_name = "output.csv"
 
-acceptable_ans = ["yes", "y", "no", "n"]
+true_options = ["yes", "y"]
+false_options = ["no", "n"]
 print("\n--------------------------------------")
 print("Following questions are for writing data (in csv) that has failed to save in database.")
 print("--------------------------------------")
-date_input = validate_ans(acceptable_ans=acceptable_ans,
-                        question="Add date? (y/n):")
-if date_input in ["yes", "y"]:
-    add_date = True
-else:
-    add_date = False
+add_date = input_to_bool(question="Add date? (y/n):", true_options=true_options, false_options=false_options)
 
-increment_input = validate_ans(acceptable_ans=acceptable_ans,
-                       question="Add auto increment for file numbering? (y/n): ")
-if increment_input in ["yes", "y"]:
-    auto_increment = True
-else:
-    auto_increment = False
+auto_increment = input_to_bool(question="Add auto increment for file numbering? (y/n): ", true_options=true_options, false_options=false_options)
 
 not_added_csv_path = name_and_write_to_csv(file_path=storage_path,
                                            file_name=not_added_file_name,
@@ -107,19 +100,9 @@ not_added_csv_path = name_and_write_to_csv(file_path=storage_path,
 print("\n--------------------------------------")
 print("Following questions are for writing all data to csv (back-up file).")
 print("--------------------------------------")
-date_input = validate_ans(acceptable_ans=acceptable_ans,
-                        question="Add date? (y/n):")
-if date_input in ["yes", "y"]:
-    add_date = True
-else:
-    add_date = False
+add_date = input_to_bool(question="Add date? (y/n):", true_options=true_options, false_options=false_options)
 
-increment_input = validate_ans(acceptable_ans=acceptable_ans,
-                       question="Add auto increment for file numbering? (y/n): ")
-if increment_input in ["yes", "y"]:
-    auto_increment = True
-else:
-    auto_increment = False
+auto_increment = input_to_bool(question="Add auto increment for file numbering? (y/n): ", true_options=true_options, false_options=false_options)
 
 all_records_csv_path = name_and_write_to_csv(file_path=storage_path,
                                              file_name=all_file_name,
@@ -235,16 +218,17 @@ class MyBot(commands.Bot):
 
         # TODO: Call llm/langgraph for response and conditional querying
         #! prob need to change logic here
+        err_message = "Error getting results"
         try:
             results = db.query_vector(query=instruct_embedding)
         except Exception as e:
-            results = "Error getting results"
+            results = err_message
         
         try:
             await message.reply(f"These are the results: \n {results}", mention_author=True)
         except Exception as e:
             print(e)
-            await message.reply("Error getting results", mention_author=True)
+            await message.reply(err_message, mention_author=True)
 
         try:
             db.add_record(table=TranscriptionsVectors,data=data)
@@ -258,18 +242,42 @@ class MyBot(commands.Bot):
                         data=data)  
         #TODO
 
-  
     
     # custom clean up when KeyboardInterrupted
     # https://stackoverflow.com/questions/69682471/how-do-i-gracefully-handle-ctrl-c-and-shutdown-discord-py-bot
     async def async_cleanup(self):
-        # Clear short term memory data/rows
-        # Recommend not deleting until all data is saved properly in csv or in other form(s).
         #! Change table name as needed
-        # tablename = "transcriptionsvectors"
-        # clean_table(db=db, tablename=tablename, truncate=False)
+        # create postgres -> csv copy
+        tablename = "transcriptionsvectors"
+        create_copy = input_to_bool(question="Create a backup csv file (export from database)? (y/n): ", true_options=true_options, false_options=false_options)
 
-        # stop compose container
+        if create_copy:
+            # copy path
+            #! Change path as needed
+            today = datetime.now().strftime("%Y-%m-%d")
+            copy_path = f'./db/backups/{tablename}_{today}'
+            # create dir (input parents) if none exists
+            Path(copy_path).mkdir(parents=True, exist_ok=True)
+
+            # Validate file name
+            copy_name = input("Copying data from PostgreSQL to csv. Give output csv name: ").lower().strip()
+            while not is_valid_windows_name(copy_name):
+                print(windows_filename_validity_message)
+                copy_name = input("Copying data from PostgreSQL to csv. Give output csv name: ").lower().strip()
+
+            # Compress file
+            compress = input_to_bool(question="Compress file or not (y/n): ", true_options=true_options, false_options=false_options)
+
+            # Export
+            db.postgres_to_csv(table_name=tablename, output_path=copy_name, compress=compress)
+
+        # Clean table (delete all rows)
+        # Note: make sure you have a copy of the data before deleting
+        clean = input_to_bool(question=f"Delete all rows from {tablename} table (y/n): ", true_options=true_options, false_options=false_options)
+        if clean:
+            clean_table(db=db, tablename=tablename, truncate=True)
+
+        # Stop compose container
         yaml_path = "db/compose.yaml"
         close_docker_compose(compose_path=yaml_path, down=False)
     

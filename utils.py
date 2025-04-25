@@ -20,6 +20,7 @@ from pandas.io.parsers import TextFileReader
 import logging
 import subprocess
 from tables import Base
+import gzip
 # from sentence_transformers import SentenceTransformer
 
 
@@ -228,10 +229,49 @@ class PostgresDataBase:
             err = format_db_error(e)
             logger.error("An error occurred while adding data to %s table: %s\n", table_name, err)
             raise RuntimeError(err)
+        
+
+    def postgres_to_csv(self, 
+                        table_name: str, 
+                        output_path: str,
+                        compress: bool = False) -> None:
+        """
+        Export Postgres table to csv file.
+
+        - table_name: name of table to export
+        - output_path: path for csv output. If using compression, use '.gz' extension. 
+        - compress: If True, write output as GZIP-compressed CSV.
+
+        """
+        copy_sql = f"COPY {table_name} TO STDOUT WITH CSV HEADER"
+
+        if compress:
+            f = gzip.open(output_path, 'wb') # binary
+        else:
+            f = open(output_path, 'wb')
+
+        with self.engine.connect() as conn:
+            with conn.begin(): # begin transaction (optional; ensures consistent snapshot)
+                raw_conn = conn.connection
+                with raw_conn.cursor() as cur: # Get the raw DBAPI connection (Psycopg connection) from SQLAlchemy
+                    with cur.copy(copy_sql) as copy: # Obtain a new cursor from Psycop
+                        for chunk in copy:
+                            f.write(chunk)
+        
+        f.close()
+
+
 
 # --------------------------
 # Folder/File Saving and Logging
 # --------------------------
+windows_filename_validity_message = """ 
+Your file name is invalid for windows file system. You CANNOT have:
+- special characters: <>:"/\\|?*
+- trailing spaces or periods
+- reserved Windows names (CON, PRN, AUX, NUL, COM1-COM9, LPT1-LPT9)
+"""
+
 def create_program_session_dir() -> str:
     """
     Creates a folder with a program session name.
@@ -276,14 +316,8 @@ def create_program_session_dir() -> str:
                 if add_date in {"yes", "y"}:
                     session_name = append_date(name=session_name)
 
-                validity_message = """
-                Your file name is invalid for windows file system. You CANNOT have:
-                    - special characters: <>:"/\\|?*
-                    - trailing spaces or periods
-                    - reserved Windows names (CON, PRN, AUX, NUL, COM1-COM9, LPT1-LPT9)
-                """
                 while not is_valid_windows_name(session_name):
-                    session_name = input(validity_message + "\nCreate a session name (for file saving). " + note_str).lower().strip()
+                    session_name = input(windows_filename_validity_message + "\nCreate a session name (for file saving). " + note_str).lower().strip()
 
                 session_name = check_dir(path_dir=path_dir,
                                          session_name=session_name)
@@ -310,14 +344,8 @@ def create_program_session_dir() -> str:
                 if add_date in {"yes", "y"}:
                     session_name = append_date(name=session_name)
 
-                validity_message = """
-                Your file name is invalid for windows file system. You CANNOT have:
-                    - special characters: <>:"/\\|?*
-                    - trailing spaces or periods
-                    - reserved Windows names (CON, PRN, AUX, NUL, COM1-COM9, LPT1-LPT9)
-                """
                 while not is_valid_windows_name(session_name):
-                    session_name = input(validity_message + "\nCreate a session name (for file saving). " + note_str).lower().strip()
+                    session_name = input(windows_filename_validity_message + "\nCreate a session name (for file saving). " + note_str).lower().strip()
 
                 session_name = check_dir(path_dir=path_dir,
                                          session_name=session_name)  
@@ -479,12 +507,6 @@ def check_dir(path_dir:str, session_name:str) -> str:
 
     Returns valid, unique folder name
     """
-    validity_message = """
-    Your file name is invalid for windows file systen. You CANNOT have:
-        - special characters: <>:"/\\|?*
-        - trailing spaces or periods
-        - reserved Windows names (CON, PRN, AUX, NUL, COM1-COM9, LPT1-LPT9)
-    """
 
     while os.path.isdir(os.path.join(path_dir, session_name)):
         new_name = input(f"Folder named '{session_name}' already exists in storage folder. If you want to keep using {session_name}, confirm with '/keep', else, give a new session name. Note that session name will be saved in lowercase letters. Also, if left empty, session name will be randomly generated alphanumeric string and today's date (ex. 'as30k1mm_3-27-2025'): ")  
@@ -504,7 +526,7 @@ def check_dir(path_dir:str, session_name:str) -> str:
                     session_name = append_date(name=new_name)
 
             while not is_valid_windows_name(new_name):
-                    new_name = input(validity_message + "\nGive a valid session name: ").lower().strip()
+                    new_name = input(windows_filename_validity_message + "\nGive a valid session name: ").lower().strip()
             session_name = new_name
         
     return session_name
@@ -739,7 +761,8 @@ def csv_to_pd(filepath: str,
                   List[Hashable],
                   List[List[Hashable]],
                   Dict[Hashable, List[Hashable]]] = False,
-              date_format: Optional[Union[str, dict]] = None) -> Union[pd.DataFrame, TextFileReader]:
+              date_format: Optional[Union[str, dict]] = None,
+              compression: Union[str, dict] = "infer") -> Union[pd.DataFrame, TextFileReader]:
     """
     Converts csv to pandas dataframe/iterator. 
     Recommend using it for files that take less than 1-2GB of memory. If file is larger, or pc lacks memory, use csv_to_pd_chunks which prevents loading everything into memory.
@@ -748,16 +771,15 @@ def csv_to_pd(filepath: str,
     - chunksize: how many rows/data per chunk. Default is None. If size defined, it will return TextFileReader, a iterable pandas chunks.
     - parse_dates: parse date or not (auto inference for python 2.0+)
     - date_format: give specific date format to adhere to. Don't use when the dates have multiple formats.
+    - compression: file compression
 
     Returns either pandas dataframe or iterable pandas chunks.
     """
-    if not filepath.endswith(".csv"):
-         filepath += ".csv"
-
     df = pd.read_csv(filepath, 
                      chunksize=chunksize,
                      parse_dates=parse_dates,
-                     date_format=date_format)
+                     date_format=date_format,
+                     compression=compression)
 
     return df
 
@@ -902,6 +924,27 @@ def close_docker_compose(compose_path: str = "db/compose.yaml", down: bool = Tru
         print("Docker Compose stopped successfully.")
     except Exception as e:
         print(f"Error stopping Docker Compose: {e}")
+
+
+def input_to_bool(question: str, true_options: Union[set, list], false_options: Union[set, list]) -> bool:
+    """
+    Gets user input and output a bool.
+
+    - question: input question for user
+    - true_options: list/set of options that will give True
+    - false_options: list/set of options that will give False
+
+    Returns a boolean.
+    """
+    all_options = list(true_options)
+    all_options.extend(false_options)
+    
+    ans = validate_ans(acceptable_ans=all_options, question=question)
+
+    if ans in true_options:
+        return True
+    else:
+        return False
 
 
 # --------------------------
