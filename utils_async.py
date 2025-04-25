@@ -1,7 +1,12 @@
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+
+
+
 from sqlalchemy_utils import database_exists, create_database
-from sqlalchemy import create_engine, text
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy import create_engine, text, Index
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker, mapped_column, Mapped
+from pgvector.sqlalchemy import Vector
 from sqlalchemy.engine import Engine
 import os
 from pathlib import Path
@@ -9,7 +14,6 @@ from dotenv import load_dotenv, set_key
 import csv
 import pickle
 from typing import Optional, Type, Any, Dict, List, Union, Hashable, Callable, Literal
-import ast
 import random
 import string
 from datetime import datetime
@@ -18,38 +22,41 @@ import pandas as pd
 import numpy as np
 from pandas.io.parsers import TextFileReader
 import logging
-from tables import Base
-import aiofiles
-import aiofiles.os
-from aiocsv import AsyncDictWriter
 import subprocess
+from tables import Base
+import gzip
+# from sentence_transformers import SentenceTransformer
 
-#* Note: Async version of 'utils.py'.
 
-#! change everything to async
 # --------------------------
 # SQLAlchemy
 # --------------------------
-class PostgresDataBaseAsync:
+class AsyncPostgresDataBase:
     def __init__(self,
                  password: str,
                  db_name: str,
                  port: int = 5432,
                  user: str = "postgres",
-                 host: str = "localhost"):
+                 host: str = "localhost",
+                 pool_size: int = 50,
+                 echo: bool = False,
+                 hide_parameters: bool = False):
         self.password = password 
         self.db_name = db_name
         self.port = port
         self.user = user
         self.host = host
+        self.pool_size = pool_size
+        self.echo = echo
+        self.hide_parameters = hide_parameters
 
-        self.url = f'postgresql+psycopg://{self.user}:{self.password}@{self.host}:{self.port}/{self.db_name}'
+        self.url = f'postgresql+asyncpg://{self.user}:{self.password}@{self.host}:{self.port}/{self.db_name}'
 
-        #TODO
-        self.engine = create_engine(self.url, pool_size=50, echo=False)
-        self.Session = sessionmaker(bind=self.engine)
+        self.engine = create_async_engine(self.url, pool_size=self.pool_size, echo=self.echo, hide_parameters=self.hide_parameters)
 
+        self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
 
+    
     def make_db(self) -> str:
         """
         If database doesn't exist, create one.
@@ -68,7 +75,7 @@ class PostgresDataBaseAsync:
 
     def enable_vectors(self) -> None:
         """
-            Adds pgvectorscale to db
+        Adds pgvectorscale to db
         """
         with self.Session() as session:
             session.execute(text("CREATE EXTENSION IF NOT EXISTS vectorscale CASCADE;")) # CASCADE will automatically install pgvector
@@ -76,8 +83,8 @@ class PostgresDataBaseAsync:
         print("Vectorscale enabled.")
 
     
-    #TODO: async
-    def add_record(self, table: Type[Base], data: Dict[str, Any]) -> None:
+
+    def add_record(self, table: Type[DeclarativeBase], data: Dict[str, Any]) -> None:
         """
         Add record. If record could not be added, it will raise error. 
 
@@ -90,13 +97,15 @@ class PostgresDataBaseAsync:
             with self.Session() as session: # auto-closes session
                 session.add(table(**data))
                 session.commit()
-        except Exception as e:
+        except DBAPIError as e:
+            err = format_db_error(e)
             session.rollback()
-            raise
-    
-    #TODO: async
+            raise RuntimeError(err)
+
+
     def query_vector(self, 
                      query: List[Union[int, float]],
+                     join: bool = False,
                      search_list_size: int=100,
                      rescore: int=50,
                      top_k: int=5) -> List[Dict]:
@@ -104,6 +113,7 @@ class PostgresDataBaseAsync:
         Uses streamingDiskAnn and cosine distance to get the most relevant query answers.
 
         - query: vectorized query input
+        - join: join 'vectors' and 'transcriptions' table or not
         - search_list_size: number of additional candidates considered during the graph search
         - rescore: re-evaluating the distances of candidate points to improve the precision of the results
         - top_k: get top k results
@@ -111,27 +121,49 @@ class PostgresDataBaseAsync:
 
         # <=> is cosine DISTANCE (1 - cosine similarity); lower the distance, the better
         # Note: pgvectorscale currently supports: cosine distance (<=>) queries, for indices created with vector_cosine_ops; L2 distance (<->) queries, for indices created with vector_l2_ops; and inner product (<#>) queries, for indices created with vector_ip_ops. This is the same syntax used by pgvector.
-        sql = text("""
-                    WITH relaxed_results AS MATERIALIZED (
-                    SELECT 
-                        *,
-                        embedding <=> :embedding AS distance
-                    FROM vectors
-                    ORDER BY distance
-                    LIMIT :limit)
-                
-                    SELECT * 
-                    FROM relaxed_results 
-                    ORDER BY distance;
-                """)
-        
+        sql = ""
+        #! Change table name(s) as needed
+        if join:
+            sql = text("""
+                        WITH relaxed_results AS MATERIALIZED (
+                        SELECT 
+                            timestamp,
+                            speaker,
+                            text,
+                            embedding <=> :embedding AS distance
+                        FROM vectors v INNER JOIN transcriptions t
+                            ON v.transcription_id = t.id 
+                        ORDER BY distance
+                        LIMIT :limit)
+                    
+                        SELECT * 
+                        FROM relaxed_results 
+                        ORDER BY distance;
+                    """)            
+        else:
+            sql = text("""
+                        WITH relaxed_results AS MATERIALIZED (
+                        SELECT 
+                            timestamp,
+                            speaker,
+                            text,
+                            embedding <=> :embedding AS distance
+                        FROM transcriptionsvectors
+                        ORDER BY distance
+                        LIMIT :limit)
+                    
+                        SELECT * 
+                        FROM relaxed_results 
+                        ORDER BY distance;
+                    """)
+
         params = {
             'embedding': str(query),  # seems like vector embedding needs to be passed in as string
             'limit': top_k
         }
 
         with self.Session() as session:
-            # https://github.com/timescale/pgvectorscale/blob/main/README.md?utm_source=chatgpt.com
+            # https://github.com/timescale/pgvectorscale/blob/main/README.md?utm_source
             session.execute(text(f"SET diskann.query_search_list_size = {search_list_size}"))
             session.execute(text(f"SET diskann.query_rescore = {rescore}"))
 
@@ -142,7 +174,6 @@ class PostgresDataBaseAsync:
         return [dict(zip(columns, row)) for row in rows]
 
 
-    # TODO
     def delete_all_rows(self, tablename) -> None:
         """
         Deletes all rows in a table. Table won't be deleted. Slower than TRUNCATE because it deletes row by row. However, it's safer for data integrity and triggers.
@@ -152,7 +183,7 @@ class PostgresDataBaseAsync:
             with session.begin():
                 session.execute(text(f"DELETE FROM {tablename};"))
 
-    # TODO
+
     def truncate_all_rows(self, tablename) -> None:
         """
         Truncates all rows in a table. Table won't be deleted. Faster than DELETE but can be harder to log or rollback. 
@@ -163,14 +194,15 @@ class PostgresDataBaseAsync:
         with self.Session() as session:
             with session.begin():
                 session.execute(text(f"TRUNCATE TABLE {tablename};"))
-        
-    #TODO
+
+
     def pandas_to_postgres(self, 
                            df: pd.DataFrame,
                            table_name: str,
                            logger: logging.Logger,
                            if_exists: str = "append",
                            index: bool = False,
+                           dtype = None,
                            method: Optional[Union[Literal['multi'], Callable]] = "multi") -> None:
         """
         Sends pandas dataframe/iterator to postgres. Also writes a log.
@@ -178,8 +210,9 @@ class PostgresDataBaseAsync:
         - df: dataframe
         - table_name: name of table to add data to
         - logger: for logging transactions
-        - if_exists: if table exists, "fail", "replace", or "append"
+        - if_exists: if table exists, "fail", "replace", or "append". Make sure to have a table with proper relationships/contraints or to_sql will create a new table. 
         - index: write index as column or not
+        - dtype: dtype of column(s)
         - method: method to insert rows (none = one per row; multi = multiple values in single INSERT; callable with signature (pd_table, conn, keys, data_iter))
 
         """
@@ -189,31 +222,75 @@ class PostgresDataBaseAsync:
                 con=self.engine,
                 if_exists=if_exists,
                 index=index,
-                method=method
+                method=method,
+                dtype=dtype
             )
             
-            logger.info(f"All data added to {table_name} successfully.")
-            logger.info("\n")
+            logger.info(f"All data added to {table_name} table successfully.\n")
 
-        except Exception as e:
-            logger.exception("An error occurred while adding data to %s: %s", table_name, e)
-            logger.info("\n")
-            raise
+        except DBAPIError as e:
+            err = format_db_error(e)
+            logger.error("An error occurred while adding data to %s table: %s\n", table_name, err)
+            raise RuntimeError(err)
+        
+
+    def postgres_to_csv(self, 
+                        table_name: str, 
+                        output_path: str,
+                        compress: bool = False) -> None:
+        """
+        Export Postgres table to csv file.
+
+        - table_name: name of table to export
+        - output_path: path for csv output. If using compression, use '.gz' extension. 
+        - compress: If True, write output as GZIP-compressed CSV.
+
+        """
+        copy_sql = f"COPY {table_name} TO STDOUT WITH CSV HEADER"
+
+        if compress:
+            f = gzip.open(output_path, 'wb') # binary
+        else:
+            f = open(output_path, 'wb')
+
+        with self.engine.connect() as conn:
+            with conn.begin(): # begin transaction (optional; ensures consistent snapshot)
+                raw_conn = conn.connection
+                with raw_conn.cursor() as cur: # Get the raw DBAPI connection (Psycopg connection) from SQLAlchemy
+                    with cur.copy(copy_sql) as copy: # Obtain a new cursor from Psycop
+                        for chunk in copy:
+                            f.write(chunk)
+        
+        f.close()
 
 
 
 # --------------------------
 # Folder/File Saving and Logging
 # --------------------------
-def create_program_session_dir() -> None:
+windows_filename_validity_message = """ 
+Your file name is invalid for windows file system. You CANNOT have:
+- special characters: <>:"/\\|?*
+- trailing spaces or periods
+- reserved Windows names (CON, PRN, AUX, NUL, COM1-COM9, LPT1-LPT9)
+"""
+
+def create_program_session_dir() -> str:
     """
     Creates a folder with a program session name.
+
+    Returns program session name
     """
     path_dir = './db/storage'
 
-    load_dotenv()
+    load_dotenv(override=True)
 
     session_name = os.environ.get('PROGRAM_SESSION')
+    
+    # session name exists but actual folder doesn't
+    
+    if not os.path.isdir(os.path.join(path_dir, session_name)):
+        session_name = ""
 
     if session_name:
         acceptable_ans = {"yes", "y", "no", "n"}
@@ -242,22 +319,44 @@ def create_program_session_dir() -> None:
                 if add_date in {"yes", "y"}:
                     session_name = append_date(name=session_name)
 
-                validity_message = """
-                Your file name is invalid for windows file system. You CANNOT have:
-                    - special characters: <>:"/\\|?*
-                    - trailing spaces or periods
-                    - reserved Windows names (CON, PRN, AUX, NUL, COM1-COM9, LPT1-LPT9)
-                """
                 while not is_valid_windows_name(session_name):
-                    session_name = input(validity_message + "\nCreate a session name (for file saving). " + note_str).lower().strip()
+                    session_name = input(windows_filename_validity_message + "\nCreate a session name (for file saving). " + note_str).lower().strip()
 
                 session_name = check_dir(path_dir=path_dir,
                                          session_name=session_name)
     else:
-        session_name = create_session_name()
-        # for some reason, there may be existing session folders while PROGRAM_SESSION=''
-        session_name = check_dir(path_dir=path_dir,
-                                 session_name=session_name)
+        acceptable_ans = {"yes", "y", "no", "n"}
+        current_str = f"Would you like to create a custom name for the folder? type yes (y). If not, type no (n): "
+        ans = validate_ans(acceptable_ans=acceptable_ans,
+                           question=current_str)
+
+        if ans in {"yes", "y"}:
+            note_str = "Note that session name will be saved in lowercase letters. Also, if left empty, session name will be randomly generated alphanumeric string and today's date (ex. 'as30k1mm_3-27-2025'): "
+
+            session_name = input("Create a session name (for file saving). " + note_str).lower().strip()
+            
+            if session_name == "":
+                session_name = create_session_name()
+                # for some reason, there may be existing session folders while PROGRAM_SESSION=''
+                session_name = check_dir(path_dir=path_dir,
+                                         session_name=session_name)
+            else:
+                add_date = validate_ans(acceptable_ans=acceptable_ans,
+                                    question="Add today's date at the end (y,n)? ")
+                
+                if add_date in {"yes", "y"}:
+                    session_name = append_date(name=session_name)
+
+                while not is_valid_windows_name(session_name):
+                    session_name = input(windows_filename_validity_message + "\nCreate a session name (for file saving). " + note_str).lower().strip()
+
+                session_name = check_dir(path_dir=path_dir,
+                                         session_name=session_name)  
+        else:
+            session_name = create_session_name()
+            # for some reason, there may be existing session folders while PROGRAM_SESSION=''
+            session_name = check_dir(path_dir=path_dir,
+                                    session_name=session_name)
 
     full_path = os.path.join(path_dir, session_name)
     if not os.path.isdir(full_path):
@@ -276,6 +375,8 @@ def create_program_session_dir() -> None:
             print(f"Current session changed: {os.environ.get('PROGRAM_SESSION')} --> {session_name}")
         else:
             print(f"Keeping program session name: {os.environ.get('PROGRAM_SESSION')}.")
+
+    return session_name
 
 
 def create_pickle_file(dir_path:str="/", filename:str="pickle", data:dict={}) -> None:
@@ -340,7 +441,7 @@ def validate_ans(acceptable_ans: Union[list, set], question: str) -> str:
     """
     Keep asking for valid user input.
 
-    - acceptable_ans: list/set of acceptable anser choices
+    - acceptable_ans: list/set of acceptable answer choices
     - question: question for user 
 
     Returns valid user input
@@ -409,12 +510,6 @@ def check_dir(path_dir:str, session_name:str) -> str:
 
     Returns valid, unique folder name
     """
-    validity_message = """
-    Your file name is invalid for windows file systen. You CANNOT have:
-        - special characters: <>:"/\\|?*
-        - trailing spaces or periods
-        - reserved Windows names (CON, PRN, AUX, NUL, COM1-COM9, LPT1-LPT9)
-    """
 
     while os.path.isdir(os.path.join(path_dir, session_name)):
         new_name = input(f"Folder named '{session_name}' already exists in storage folder. If you want to keep using {session_name}, confirm with '/keep', else, give a new session name. Note that session name will be saved in lowercase letters. Also, if left empty, session name will be randomly generated alphanumeric string and today's date (ex. 'as30k1mm_3-27-2025'): ")  
@@ -434,7 +529,7 @@ def check_dir(path_dir:str, session_name:str) -> str:
                     session_name = append_date(name=new_name)
 
             while not is_valid_windows_name(new_name):
-                    new_name = input(validity_message + "\nGive a valid session name: ").lower().strip()
+                    new_name = input(windows_filename_validity_message + "\nGive a valid session name: ").lower().strip()
             session_name = new_name
         
     return session_name
@@ -507,67 +602,6 @@ def write_to_csv(full_file_path: str,
             writer.writerows(data) # multiple
 
 
-async def write_to_csv_async(full_file_path: str, 
-                             data: Union[Dict[str, Any], List[Dict[str, Any]]]) -> None:
-    """
-    Write (list of) data dict to csv asynchronously.
-
-    - full_file_path: full file path. Note that csv file doesn't need to exist, but folder(s) must exist.
-    - data: (list of) dict to be added
-    """
-    if not full_file_path.endswith(".csv"):
-        full_file_path += ".csv"
-
-    single_row = True
-    if isinstance(data, list):
-        single_row = False
-    
-    no_data = False
-
-    file_exists = await aiofiles.os.path.isfile(full_file_path)
-
-    if single_row:
-        no_data = not data
-    else:
-        if not data: # empty list
-            no_data = True
-        else:
-            no_data = not data[0] # assumes only based on first data (for speed). Use any() or all() for more accuracy
-    
-    if no_data:
-        if file_exists:
-        # create empty file
-            async with aiofiles.open(full_file_path, 'w', newline='', encoding='utf-8') as f:
-                pass
-        return 
-
-    # Only reads first line for header
-    has_header = False
-    if file_exists:
-        async with aiofiles.open(full_file_path, "r", newline='', encoding='utf-8') as f:
-            header = await f.readline()
-            if header:
-                has_header = True  
-
-    if single_row:
-        fieldnames = data.keys()
-    else:
-        fieldnames = data[0].keys()  
-
-    # append data
-    async with aiofiles.open(full_file_path, 'a', newline='', encoding='utf-8') as afp:
-        writer = AsyncDictWriter(afp, fieldnames=fieldnames)
-
-        # if file doesn't have header, add header
-        if not has_header:
-            await writer.writeheader()
-
-        if single_row:
-            await writer.writerow(data) # singular
-        else:
-            await writer.writerows(data) # multiple
-
-
 def name_and_write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]] = {},
                     file_path: str = "./db/storage",
                     file_name: str = "output.csv",
@@ -589,7 +623,7 @@ def name_and_write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]] = {}
 
     Returns full path of created file.
     """
-    load_dotenv()
+    load_dotenv(override=True)
     
     if not session_name:
         session_name = os.environ.get('PROGRAM_SESSION')
@@ -696,7 +730,8 @@ def update_file_num_pkl(dir_path: str = './',
             file_name, file_num = base.rsplit(delimiter, 1)
             # any decimal numbers (ex. 3.1) will be turned to int
             file_num = int(file_num)
-        except:
+        except Exception as e:
+            print("Error", e)
             file_name = base
             not_added.append(f)
             continue
@@ -724,45 +759,51 @@ def update_file_num_pkl(dir_path: str = './',
 
 def csv_to_pd(filepath: str, 
               chunksize: Optional[int] = None,
-              parse_date: Union[
+              parse_dates: Union[
                   bool,
                   List[Hashable],
                   List[List[Hashable]],
                   Dict[Hashable, List[Hashable]]] = False,
-              date_format: Optional[Union[str, dict]] = None) -> Union[pd.DataFrame, TextFileReader]:
+              date_format: Optional[Union[str, dict]] = None,
+              compression: Union[str, dict] = "infer") -> Union[pd.DataFrame, TextFileReader]:
     """
     Converts csv to pandas dataframe/iterator. 
     Recommend using it for files that take less than 1-2GB of memory. If file is larger, or pc lacks memory, use csv_to_pd_chunks which prevents loading everything into memory.
 
     - filepath: full csv file path
-    - chunksize: how many rows/data per chunk
-    - parse_date: parse date or not (auto inference for python 2.0+)
+    - chunksize: how many rows/data per chunk. Default is None. If size defined, it will return TextFileReader, a iterable pandas chunks.
+    - parse_dates: parse date or not (auto inference for python 2.0+)
     - date_format: give specific date format to adhere to. Don't use when the dates have multiple formats.
+    - compression: file compression
 
     Returns either pandas dataframe or iterable pandas chunks.
     """
-    if not filepath.endswith(".csv"):
-         filepath += ".csv"
-
     df = pd.read_csv(filepath, 
                      chunksize=chunksize,
-                     parse_date=parse_date,
-                     date_format=date_format)
+                     parse_dates=parse_dates,
+                     date_format=date_format,
+                     compression=compression)
 
     return df
 
 
-def str_to_vec(s: str) -> np.array:
+def str_to_vec(s: str, to_list=False) -> Union[np.ndarray, list]:
     """
     Convert to vector (numpy array)
 
     - s: string version of vectors
+    - to_list: convert to list or not
     
-    Returns numpy array vector
+    Returns numpy array or list
     """
     clean = s.strip("[]")
 
-    return np.fromstring(clean, sep=",")
+    result = np.fromstring(clean, sep=",")
+
+    if to_list:
+        result = result.tolist()
+
+    return result
 
 
 LogLevelStr = Literal["NOTSET", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
@@ -833,13 +874,20 @@ def setLogHandler(log_dir: str = './',
 
     return handler
 
+def format_db_error(e: DBAPIError) -> str:
+    """
+    Formats DBAPIError for logging
 
+    Returns select error message.
+    """
+    orig = e.orig
+    cls = f"{orig.__class__.__module__}.{orig.__class__.__name__}"
+    return f"({cls}) {orig}"
 
 # --------------------------
 # Handling shutdown
 # --------------------------
-#TODO
-def clean_table(db: PostgresDataBaseAsync, 
+def clean_table(db: PostgresDataBase, 
                 tablename: str,
                 truncate: bool = True) -> None:
     """
@@ -859,17 +907,85 @@ def clean_table(db: PostgresDataBaseAsync,
         print(f"Could not delete all rows from '{tablename}' table. Error: {e}")
 
 
-def close_docker_compose(compose_path: str = "db/compose.yaml") -> None:
+def close_docker_compose(compose_path: str = "db/compose.yaml", down: bool = True) -> None:
     """
     Closes docker compose container(s).
 
     - compose_path: path of docker compose yaml file
+    - down: should it be compose down or stop. If False, it will stop instead. Down will get rid of container and network.
 
     """
+    choice = ""
+    if down:
+        choice = "down"
+    else:
+        choice = "stop"
+
     try:
-        command = ["docker", "compose", "-f", compose_path, "down"]
+        command = ["docker", "compose", "-f", compose_path, choice]
         subprocess.run(command, check=True)
         print("Docker Compose stopped successfully.")
     except Exception as e:
         print(f"Error stopping Docker Compose: {e}")
+
+
+def input_to_bool(question: str, true_options: Union[set, list], false_options: Union[set, list]) -> bool:
+    """
+    Gets user input and output a bool.
+
+    - question: input question for user
+    - true_options: list/set of options that will give True
+    - false_options: list/set of options that will give False
+
+    Returns a boolean.
+    """
+    all_options = list(true_options)
+    all_options.extend(false_options)
+    
+    ans = validate_ans(acceptable_ans=all_options, question=question)
+
+    if ans in true_options:
+        return True
+    else:
+        return False
+
+
+# --------------------------
+# Embedding Model
+# --------------------------
+task = 'Given a user query, retrieve relevant information that answer the query.'
+def get_detailed_instruct(query: str,
+                          task_description: str = task) -> str:
+    """
+    Adds instruction to query. Some embedding models like 'intfloat/multilingual-e5-large-instruct' require instructions to be added to query. Documents don't need instructions.
+
+    - task_description: instruction for the query
+    - query: input query
+
+    Returns string of instruction + query 
+    """
+    return f'Instruct: {task_description}\nQuery: {query}'
+
+def create_embedding(model_name: str, 
+                     input: str) -> np.ndarray:
+    """
+        Creates vector embedding
+        
+        - model_name: name of embedding model
+        - input: input string that needs to be converted to embedding
+
+        Returns NORMALIZED numpy array of vector embedding
+    """
+    model = SentenceTransformer(model_name)
+
+    embeddings = model.encode(input, convert_to_tensor=False, normalize_embeddings=True)
+
+    return embeddings
+
+
+# --------------------------
+# LLM Agents/Tools
+# --------------------------
+
+
 

@@ -9,10 +9,7 @@ from utils import (
     get_detailed_instruct, 
     create_embedding,
     input_to_bool,
-    is_valid_windows_name,
-    windows_filename_validity_message,
     )
-from pathlib import Path 
 from sqlalchemy import create_engine, Index
 from sqlalchemy.orm import sessionmaker, mapped_column, Mapped
 from pgvector.sqlalchemy import Vector
@@ -125,6 +122,10 @@ db.enable_vectors()
 # create table(s)
 CombinedBase.metadata.create_all(db.engine) # prevents duplicate tables
 Session = sessionmaker(bind=db.engine)
+
+# Delete all rows from short_term db if necessary
+
+
 
 # pk generation 
 #! Change start_date, machine_id if necessary
@@ -246,37 +247,6 @@ class MyBot(commands.Bot):
     # custom clean up when KeyboardInterrupted
     # https://stackoverflow.com/questions/69682471/how-do-i-gracefully-handle-ctrl-c-and-shutdown-discord-py-bot
     async def async_cleanup(self):
-        #! Change table name as needed
-        # create postgres -> csv copy
-        tablename = "transcriptionsvectors"
-        create_copy = input_to_bool(question="Create a backup csv file (export from database)? (y/n): ", true_options=true_options, false_options=false_options)
-
-        if create_copy:
-            # copy path
-            #! Change path as needed
-            today = datetime.now().strftime("%Y-%m-%d")
-            copy_path = f'./db/backups/{tablename}_{today}'
-            # create dir (input parents) if none exists
-            Path(copy_path).mkdir(parents=True, exist_ok=True)
-
-            # Validate file name
-            copy_name = input("Copying data from PostgreSQL to csv. Give output csv name: ").lower().strip()
-            while not is_valid_windows_name(copy_name):
-                print(windows_filename_validity_message)
-                copy_name = input("Copying data from PostgreSQL to csv. Give output csv name: ").lower().strip()
-
-            # Compress file
-            compress = input_to_bool(question="Compress file or not (y/n): ", true_options=true_options, false_options=false_options)
-
-            # Export
-            db.postgres_to_csv(table_name=tablename, output_path=copy_name, compress=compress)
-
-        # Clean table (delete all rows)
-        # Note: make sure you have a copy of the data before deleting
-        clean = input_to_bool(question=f"Delete all rows from {tablename} table (y/n): ", true_options=true_options, false_options=false_options)
-        if clean:
-            clean_table(db=db, tablename=tablename, truncate=True)
-
         # Stop compose container
         yaml_path = "db/compose.yaml"
         close_docker_compose(compose_path=yaml_path, down=False)
@@ -288,3 +258,6 @@ class MyBot(commands.Bot):
 
 bot = MyBot(command_prefix="/", intents=discord.Intents.all())
 bot.run(discord_token)
+
+#* (short-term) Postgres -> csv backups: run short_term_backups.py
+#* (long_term) csv -> Postgres: run long_term_db.py
