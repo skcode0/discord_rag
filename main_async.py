@@ -262,5 +262,5 @@ async def main():
     bot = MyBot(command_prefix="/", intents=discord.Intents.all())
     bot.run(discord_token)
 
-#* (short-term) Postgres -> csv backups: run short_term_backups.py
-#* (long_term) csv -> Postgres: run long_term_db.py
+#* (short-term) Postgres -> csv backups: run 'backups.py'
+#* (long_term) csv -> Postgres: run 'long_term_db.py'
