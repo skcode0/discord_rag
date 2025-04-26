@@ -121,7 +121,6 @@ db.enable_vectors()
 
 # create table(s)
 CombinedBase.metadata.create_all(db.engine) # prevents duplicate tables
-Session = sessionmaker(bind=db.engine)
 
 # Delete all rows from short_term db if necessary
 

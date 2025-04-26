@@ -200,8 +200,8 @@ class AsyncPostgresDataBase:
             async with session.begin():
                 await session.execute(text(f"TRUNCATE TABLE {tablename};"))
 
-    #TODO: async
-    def pandas_to_postgres(self, 
+
+    async def pandas_to_postgres(self, 
                            df: pd.DataFrame,
                            table_name: str,
                            logger: logging.Logger,
@@ -222,24 +222,26 @@ class AsyncPostgresDataBase:
 
         """
         try:
-            df.to_sql(
-                name=table_name,
-                con=self.engine,
-                if_exists=if_exists,
-                index=index,
-                method=method,
-                dtype=dtype
-            )
-            
-            logger.info(f"All data added to {table_name} table successfully.\n")
+            async with self.engine.begin() as conn:
+                await conn.run_sync(lambda sync_conn: 
+                    df.to_sql(
+                        name=table_name,
+                        con=sync_conn,
+                        if_exists=if_exists,
+                        index=index,
+                        dtype=dtype,
+                        method=method
+                    )
+                )
 
+            logger.info(f"All data added to {table_name} table successfully.\n")
         except DBAPIError as e:
             err = format_db_error(e)
             logger.error("An error occurred while adding data to %s table: %s\n", table_name, err)
             raise RuntimeError(err)
         
     #TODO: async
-    def postgres_to_csv(self, 
+    async def postgres_to_csv(self, 
                         table_name: str, 
                         output_path: str,
                         compress: bool = False) -> None:
@@ -279,7 +281,7 @@ Your file name is invalid for windows file system. You CANNOT have:
 - trailing spaces or periods
 - reserved Windows names (CON, PRN, AUX, NUL, COM1-COM9, LPT1-LPT9)
 """
-#TODO: async
+
 def create_program_session_dir() -> str:
     """
     Creates a folder with a program session name.
@@ -383,7 +385,7 @@ def create_program_session_dir() -> str:
 
     return session_name
 
-#TODO: async
+
 def create_pickle_file(dir_path:str="/", filename:str="pickle", data:dict={}) -> None:
     """
     Create pickle file.
@@ -401,7 +403,7 @@ def create_pickle_file(dir_path:str="/", filename:str="pickle", data:dict={}) ->
     with open(os.path.join(dir_path, filename), 'wb') as file:
         pickle.dump(data, file)
 
-#TODO: async???
+
 def check_filename(filename:str, correct_ext:str) -> str:
     """
     Checks if file name is valid.
@@ -441,7 +443,7 @@ def create_session_name(str_len: int = 8) -> str:
 
         return session_name
 
-#TODO: async???
+
 def validate_ans(acceptable_ans: Union[list, set], question: str) -> str:
     """
     Keep asking for valid user input.
@@ -505,7 +507,7 @@ def is_valid_windows_name(name:str) -> bool:
 
     return True
 
-#TODO: async???
+
 def check_dir(path_dir:str, session_name:str) -> str:
     """
     Check if folder already exist
@@ -606,7 +608,7 @@ def write_to_csv(full_file_path: str,
         else:
             writer.writerows(data) # multiple
 
-#TODO: async
+
 def name_and_write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]] = {},
                     file_path: str = "./db/storage",
                     file_name: str = "output.csv",
@@ -709,7 +711,7 @@ def name_and_write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]] = {}
 
     return full_path
 
-#TODO: async
+
 def update_file_num_pkl(dir_path: str = './',
                         delimiter: str = "_") -> str:
     """
@@ -839,7 +841,7 @@ def setLogger(name: str = __name__,
 
     return logger
 
-#TODO: async???
+
 def setLogHandler(log_dir: str = './',
                   log_filename: str = 'log.log',
                   mode: str = 'a',

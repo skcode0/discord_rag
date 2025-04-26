@@ -66,6 +66,9 @@ logger.info(f"{today}\n")
 # Create copy
 # --------------------------
 #! Change file name as needed
+#TODO: make sure no duplicate file name exists
+
+
 
 # Export
 db.postgres_to_csv(table_name=tablename, output_path=copy_name, compress=compress)
