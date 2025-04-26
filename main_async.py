@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 import sys
 from tables import CombinedBase, Base, Transcriptions, Vectors, TranscriptionsVectors
 from sonyflake import SonyFlake
+import asyncio
 
 
 # --------------------------
@@ -261,6 +262,8 @@ async def main():
 
     bot = MyBot(command_prefix="/", intents=discord.Intents.all())
     bot.run(discord_token)
+
+asyncio.run(main())
 
 #* (short-term) Postgres -> csv backups: run 'backups.py'
 #* (long_term) csv -> Postgres: run 'long_term_db.py'

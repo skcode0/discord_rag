@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-
+from asyncio.subprocess import PIPE
+import asyncio
 
 
 from sqlalchemy_utils import database_exists, create_database
@@ -906,8 +907,8 @@ def clean_table(db: PostgresDataBase,
     except Exception as e:
         print(f"Could not delete all rows from '{tablename}' table. Error: {e}")
 
-#TODO: async???
-def close_docker_compose(compose_path: str = "db/compose.yaml", down: bool = True) -> None:
+
+async def close_docker_compose(compose_path: str = "db/compose.yaml", down: bool = True) -> None:
     """
     Closes docker compose container(s).
 
@@ -921,12 +922,15 @@ def close_docker_compose(compose_path: str = "db/compose.yaml", down: bool = Tru
     else:
         choice = "stop"
 
-    try:
-        command = ["docker", "compose", "-f", compose_path, choice]
-        subprocess.run(command, check=True)
+    command = ["docker", "compose", "-f", compose_path, choice]
+    proc = await asyncio.create_subprocess_exec(*command, stdout=PIPE, stderr=PIPE, text=True)
+
+    stdout, stderr = await proc.communicate()
+
+    if proc.returncode != 0:
+        raise RuntimeError(f"Docker stop failed (code={proc.returncode}): {stderr.strip()}")
+    else:
         print("Docker Compose stopped successfully.")
-    except Exception as e:
-        print(f"Error stopping Docker Compose: {e}")
 
 
 def input_to_bool(question: str, true_options: Union[set, list], false_options: Union[set, list]) -> bool:
