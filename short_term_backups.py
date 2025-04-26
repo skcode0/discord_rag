@@ -1,5 +1,5 @@
-from utils import (
-    PostgresDataBase, 
+from utils_async import (
+    AsyncPostgresDataBase, 
     clean_table, 
     input_to_bool,
     is_valid_windows_name,
@@ -11,6 +11,8 @@ from datetime import datetime
 from pathlib import Path
 import subprocess
 import sys
+from dotenv import load_dotenv
+import os
 
 #* This is for creating backup of short_term db (postgres -> csv)
 
@@ -18,6 +20,11 @@ import sys
 tablename = "transcriptionsvectors"
 true_options = ["yes", "y"]
 false_options = ["no", "n"]
+
+# load most recent program session name
+load_dotenv(override=True)
+
+recent_sess = os.environ.get('PROGRAM_SESSION')
 
 # --------------------------
 # Create directory
@@ -67,7 +74,7 @@ logger.info(f"{today}\n")
 # --------------------------
 #! Change file name as needed
 #TODO: make sure no duplicate file name exists
-
+# ask for file name
 
 
 # Export

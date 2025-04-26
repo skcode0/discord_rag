@@ -295,18 +295,17 @@ def create_program_session_dir() -> str:
     session_name = os.environ.get('PROGRAM_SESSION')
     
     # session name exists but actual folder doesn't
-    
     if not os.path.isdir(os.path.join(path_dir, session_name)):
         session_name = ""
 
+    true_options = {"yes", "y"}
+    false_options= {"no", "n"}
     if session_name:
-        acceptable_ans = {"yes", "y", "no", "n"}
-        current_str = f"Your current program session name is: {session_name}. If you would like to keep the current session name, type yes (y). If not, type no (n): "
+        current_str = f"Your current program session name is: {session_name}. Would you like to keep the current session name? (y/n): "
 
-        ans = validate_ans(acceptable_ans=acceptable_ans,
-                           question=current_str)
+        ans = input_to_bool(question=current_str, true_options=true_options, false_options=false_options)
 
-        if ans in {"yes", "y"}:
+        if ans:
             print(f"Keeping program session name: {session_name}.")
             return
         else: # {no, n}
@@ -320,10 +319,9 @@ def create_program_session_dir() -> str:
                 session_name = check_dir(path_dir=path_dir,
                                          session_name=session_name)
             else:
-                add_date = validate_ans(acceptable_ans=acceptable_ans,
-                                    question="Add today's date at the end (y,n)? ")
+                add_date = input_to_bool(question="Add today's date at the end? (y/n): ", true_options=true_options, false_options=false_options)
                 
-                if add_date in {"yes", "y"}:
+                if add_date:
                     session_name = append_date(name=session_name)
 
                 while not is_valid_windows_name(session_name):
@@ -332,12 +330,10 @@ def create_program_session_dir() -> str:
                 session_name = check_dir(path_dir=path_dir,
                                          session_name=session_name)
     else:
-        acceptable_ans = {"yes", "y", "no", "n"}
-        current_str = f"Would you like to create a custom name for the folder? type yes (y). If not, type no (n): "
-        ans = validate_ans(acceptable_ans=acceptable_ans,
-                           question=current_str)
+        current_str = "Would you like to create a custom name for the folder? (y/n): "
+        ans = input_to_bool(question=current_str, true_options=true_options, false_options=false_options)
 
-        if ans in {"yes", "y"}:
+        if ans:
             note_str = "Note that session name will be saved in lowercase letters. Also, if left empty, session name will be randomly generated alphanumeric string and today's date (ex. 'as30k1mm_3-27-2025'): "
 
             session_name = input("Create a session name (for file saving). " + note_str).lower().strip()
@@ -348,10 +344,9 @@ def create_program_session_dir() -> str:
                 session_name = check_dir(path_dir=path_dir,
                                          session_name=session_name)
             else:
-                add_date = validate_ans(acceptable_ans=acceptable_ans,
-                                    question="Add today's date at the end (y,n)? ")
+                add_date = input_to_bool(question="Add today's date at the end? (y/n): ", true_options=true_options, false_options=false_options)
                 
-                if add_date in {"yes", "y"}:
+                if add_date:
                     session_name = append_date(name=session_name)
 
                 while not is_valid_windows_name(session_name):
@@ -386,7 +381,7 @@ def create_program_session_dir() -> str:
     return session_name
 
 
-def create_pickle_file(dir_path:str="/", filename:str="pickle", data:dict={}) -> None:
+def create_pickle_file(dir_path: str = "/", filename: str = "pickle", data: dict = {}) -> None:
     """
     Create pickle file.
 
@@ -404,7 +399,7 @@ def create_pickle_file(dir_path:str="/", filename:str="pickle", data:dict={}) ->
         pickle.dump(data, file)
 
 
-def check_filename(filename:str, correct_ext:str) -> str:
+def check_filename(filename: str, correct_ext: str) -> str:
     """
     Checks if file name is valid.
 
@@ -635,12 +630,8 @@ def name_and_write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]] = {}
     if not session_name:
         session_name = os.environ.get('PROGRAM_SESSION')
 
-        # unnamed session name will automatically get date appended
         if session_name == "":
-            session_name = "unnamed_session"
-            unnamed_path = os.path.join(file_path, session_name)
-            if not os.path.isdir(unnamed_path):
-                os.mkdir(unnamed_path)
+            create_program_session_dir()
             add_date = True
     
     if not os.path.isdir(os.path.join(file_path, session_name)):
