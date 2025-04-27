@@ -1,14 +1,12 @@
+from sqlalchemy import text
+from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy_utils import database_exists, create_database
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from asyncio.subprocess import PIPE
 import asyncio
-
-
-from sqlalchemy_utils import database_exists, create_database
-from sqlalchemy import create_engine, text, Index
-from sqlalchemy.exc import DBAPIError
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker, mapped_column, Mapped
-from pgvector.sqlalchemy import Vector
-from sqlalchemy.engine import Engine
+import aiofiles
+import aiocsv
 import os
 from pathlib import Path
 from dotenv import load_dotenv, set_key
@@ -23,9 +21,6 @@ import pandas as pd
 import numpy as np
 from pandas.io.parsers import TextFileReader
 import logging
-import subprocess
-from tables import Base
-import gzip
 # from sentence_transformers import SentenceTransformer
 
 
@@ -170,8 +165,9 @@ class AsyncPostgresDataBase:
 
         async with self.Session() as session:
             # https://github.com/timescale/pgvectorscale/blob/main/README.md?utm_source
-            await session.execute(text(f"SET diskann.query_search_list_size = {search_list_size}"))
-            await session.execute(text(f"SET diskann.query_rescore = {rescore}"))
+            await session.execute(text(
+            "SET diskann.query_search_list_size = :size; "
+            "SET diskann.query_rescore = :rescore"), {"size": search_list_size, "rescore": rescore})
 
             result = await session.execute(sql, params)
             rows = await result.fetchall()
@@ -184,6 +180,8 @@ class AsyncPostgresDataBase:
         """
         Deletes all rows in a table. Table won't be deleted. Slower than TRUNCATE because it deletes row by row. However, it's safer for data integrity and triggers.
         
+        - tablename: name of table to delete
+
         """
         async with self.Session() as session:
             async with session.begin():
@@ -194,7 +192,7 @@ class AsyncPostgresDataBase:
         """
         Truncates all rows in a table. Table won't be deleted. Faster than DELETE but can be harder to log or rollback. 
 
-        - tablename: name of table
+        - tablename: name of table to truncate
         
         """
         async with self.Session() as session:
@@ -241,36 +239,81 @@ class AsyncPostgresDataBase:
             logger.error("An error occurred while adding data to %s table: %s\n", table_name, err)
             raise RuntimeError(err)
         
-    #TODO: async
+
     async def postgres_to_csv(self, 
                         table_name: str, 
-                        output_path: str,
-                        compress: bool = False) -> None:
+                        output_path: str) -> None:
         """
         Export Postgres table to csv file.
 
         - table_name: name of table to export
-        - output_path: path for csv output. If using compression, use '.gz' extension. 
-        - compress: If True, write output as GZIP-compressed CSV.
+        - output_path: path for csv output.
 
         """
-        copy_sql = f"COPY {table_name} TO STDOUT WITH CSV HEADER"
+        try:
+            copy_sql = f"COPY {table_name} TO STDOUT WITH CSV HEADER"
 
-        if compress:
-            f = gzip.open(output_path, 'wb') # binary
-        else:
-            f = open(output_path, 'wb')
+            with self.engine.connect() as conn:
+                async with conn.begin():
+                    raw_conn = await conn.get_raw_connection()
+                
+                # write to file
+                async with aiofiles.open(output_path, mode="wb") as f:
+                    async with raw_conn.cursor() as cur:
+                        async with cur.copy(copy_sql) as stream:
+                            async for chunk in stream:
+                                await f.write(chunk)
+            
+            print(f"Backup created at {output_path}")
+        except Exception as e:
+            print("Backup error:", e)
 
-        with self.engine.connect() as conn:
-            with conn.begin(): # begin transaction (optional; ensures consistent snapshot)
-                raw_conn = conn.connection
-                with raw_conn.cursor() as cur: # Get the raw DBAPI connection (Psycopg connection) from SQLAlchemy
-                    with cur.copy(copy_sql) as copy: # Obtain a new cursor from Psycop
-                        for chunk in copy:
-                            f.write(chunk)
+
+    async def dump_postgres(self, 
+                            backup_path: str, 
+                            database_name: str, 
+                            F: str = "p", 
+                            blob: bool = True, 
+                            compress: bool = True, compress_level: Optional[int] = None) -> None:
+        """
+        Uses subprocess to dump postgres database. 
+
+        - backup_path: path for backup file output
+        - database_name: name of database to back up
+        - F: format of backup. Defaults to (p)lain. Other formats will require pg_restore when restoring db.
+        - blob: include large objects (BLOBs) or not
+        - compress:  
+        - compress_level: If compress = True, what level should the compress be (0-9)? When None, it will default to 6.
+            
+        """
+        cmd = ["pg_dump", "-F", F]
+
+        if blob:
+            cmd.append("-b")
         
-        f.close()
+        if F.lower() in {"c", "d"}:
+            if compress:
+                if compress_level is not None:
+                    cmd += ['-Z', str(compress_level)]
+            else:
+                cmd += ['-Z', '0']
 
+        cmd += ["-f", backup_path]
+        cmd.append(database_name)
+        
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=PIPE,
+            stderr=PIPE,
+            text=True
+        )
+
+        stdout, stderr = await proc.communicate()
+
+        if proc.returncode != 0:
+            raise RuntimeError(f"pg_dump failed: {stderr.strip()}")
+        else:
+             print(f"Backup completed successfully. Output saved to {backup_path}")
 
 
 # --------------------------
@@ -537,7 +580,7 @@ def check_dir(path_dir:str, session_name:str) -> str:
         
     return session_name
 
-#TODO: async
+
 def write_to_csv(full_file_path: str, 
                  data: Union[Dict[str, Any], List[Dict[str, Any]]]) -> None:
     """
@@ -603,6 +646,73 @@ def write_to_csv(full_file_path: str,
             writer.writerow(data) # singular
         else:
             writer.writerows(data) # multiple
+
+
+#TODO: async
+async def write_to_csv_async(full_file_path: str, 
+                 data: Union[Dict[str, Any], List[Dict[str, Any]]]) -> None:
+    """
+    Write (list of) data dict to csv in async.
+    Note: making this async doesn't necessarily mean it will be faster. It can be slower than syncronous version due to overhead. However, async doesn't block the event loop.
+
+    - full_file_path: full file path. Note that csv file doesn't need to exist, but folder(s) must exist.
+    - data: (list of) dict to be added
+    """
+
+    if not full_file_path.endswith(".csv"):
+        full_file_path += ".csv"
+    
+    single_row = True
+    if isinstance(data, list):
+        single_row = False
+    
+    no_data = False
+    file_exists = await asyncio.to_thread(os.path.isfile, full_file_path)
+
+    if single_row:
+        no_data = not data
+    else:
+        if not data: # empty list
+            no_data = True
+        else:
+            no_data = not data[0] # assumes only based on first data (for speed). Use any() or all() for more accuracy
+        
+
+    if no_data:
+        if not file_exists:
+            # create empty file
+            async with aiofiles.open(full_file_path, mode='w', newline='', encoding='utf-8') as f:
+                pass
+        return
+    
+
+    # Only reads first line for header
+    has_header = False
+    if file_exists:
+        async with aiofiles.open(full_file_path, mode="r", newline='', encoding='utf-8') as f:
+            reader = aiocsv.AsyncReader(f)
+            async for row in reader:
+                if row:
+                    has_header = True
+                break
+
+    if single_row:
+        fieldnames = data.keys()
+    else:
+        fieldnames = data[0].keys()
+
+    # append data
+    async with aiofiles.open(full_file_path, mode='a', newline='', encoding='utf-8') as csvfile:
+        writer = aiocsv.AsyncDictWriter(csvfile, fieldnames=fieldnames)
+
+        # if file doesn't have header, add header
+        if not has_header:
+            await writer.writeheader()
+
+        if single_row:
+            await writer.writerow(data) # singular
+        else:
+            await writer.writerows(data) # multiple
 
 
 def name_and_write_to_csv(data: Union[Dict[str, Any], List[Dict[str, Any]]] = {},
@@ -766,8 +876,7 @@ def csv_to_pd(filepath: str,
               date_format: Optional[Union[str, dict]] = None,
               compression: Union[str, dict] = "infer") -> Union[pd.DataFrame, TextFileReader]:
     """
-    Converts csv to pandas dataframe/iterator. 
-    Recommend using it for files that take less than 1-2GB of memory. If file is larger, or pc lacks memory, use csv_to_pd_chunks which prevents loading everything into memory.
+    Converts csv to pandas dataframe/iterator.
 
     - filepath: full csv file path
     - chunksize: how many rows/data per chunk. Default is None. If size defined, it will return TextFileReader, a iterable pandas chunks.
