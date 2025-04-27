@@ -188,6 +188,8 @@ async def main():
                 raise
 
         async def on_message(self, message):
+            # Note: If only images/videos/audio/gifs or any other attachments sent, text content will be empty.
+            # Note: If storing unstructured data, use multi-modal embedding model (and data lake).
             if message.content != "":
                 # for storage
                 # embedding_vector = await create_embedding(model_name=embedding_model,
@@ -272,9 +274,9 @@ async def main():
             results = await db.query_vector(query=instruct_embedding)
         except Exception as e:
             results = err_message
-        #TODO----
-
+        
         response = "Some llm response"
+        #TODO----
 
         limit = 2000 # message char limit
         if len(response) > limit:
@@ -284,9 +286,10 @@ async def main():
                 break_on_hyphens=True
             )
             
-            for i,r in enumerate(tw.wrap(response), 1):
-                await interaction.followup.send(f"Page {i}: {interaction.user.mention} {r}")
-
+            chunks = tw.wrap(response)
+            chunks_len = len(chunks)
+            for i,c in enumerate(chunks, 1):
+                await interaction.followup.send(f"Page {i}/{chunks_len}: {interaction.user.mention} {c}")
         else:
             await interaction.followup.send(f"{interaction.user.mention} {response}")
         
