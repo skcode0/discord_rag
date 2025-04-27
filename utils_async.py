@@ -52,8 +52,8 @@ class AsyncPostgresDataBase:
 
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
 
-    
-    async def make_db(self) -> str:
+    #TODO: fix
+    async def make_db(self) -> None:
         """
         If database doesn't exist, create one.
         Reference: Connect to PostgreSQL Using SQLAlchemy & Python (https://www.youtube.com/watch?v=neW9Y9xh4jc)
@@ -61,19 +61,16 @@ class AsyncPostgresDataBase:
         Returns postgres url
         """
         async with self.engine.connect() as conn:
-            exists = await conn.run_sync(
-                lambda sync_conn: database_exists(self.url)
-            )
+            result = await conn.execute(
+                text("SELECT 1 FROM pg_catalog.pg_database WHERE datname = :dbname"), 
+                {"dbname": self.db_name})
+            exists = result.scalar() is not None
 
             if not exists:
-                await conn.run_sync(
-                    lambda sync_conn: create_database(self.url)
-                )
+                await conn.execute(text(f"CREATE DATABASE {self.db_name}"))
                 print(f"Database {self.db_name} has been sucessfully created.")
             else:
                 print(f"The database with '{self.db_name}' name already exists.")
-            
-            return self.url
     
         
     async def enable_vectors(self) -> None:
@@ -1010,6 +1007,7 @@ async def clean_table(db: AsyncPostgresDataBase,
         print(f"Could not delete all rows from '{tablename}' table. Error: {e}")
 
 
+#TODO: need to fix
 async def close_docker_compose(compose_path: str = "db/compose.yaml", down: bool = True) -> None:
     """
     Closes docker compose container(s).

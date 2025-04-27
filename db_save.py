@@ -5,7 +5,6 @@ from utils_async import (
     setLogger, 
     setLogHandler,
     close_docker_compose,
-    format_db_error
 )
 import pandas as pd
 from datetime import datetime, timezone
@@ -14,7 +13,6 @@ import os
 import subprocess
 import sys
 from tables import Base
-from sqlalchemy.orm import sessionmaker
 from pgvector.sqlalchemy import Vector
 import asyncio
 
@@ -37,6 +35,7 @@ except subprocess.CalledProcessError as e:
 # --------------------------
 logger = setLogger(setLevel = 'INFO')
 
+#! Change dir name as needed
 log_dir = './db/storage/long_term_logs'
 today = datetime.now().strftime('%Y-%m-%d')
 log_filename = f'{today}.log'
@@ -51,13 +50,9 @@ logger.addHandler(handler)
 # Load csv to pandas, create db/tables if none exists
 # --------------------------
 #! Change to correct path name if necessary
-path = "./db/storage/output_2025_04_22_1.csv"
-
-logger.info(f"{path}")
-logger.info(f"{datetime.now()}\n")
-
 path = "./db/storage/output_2025-04-22_1.csv"
 
+#! Load in any relevant env variables as needed 
 load_dotenv(override=True)
 password = os.environ.get('POSTGRES_PASSWORD')
 db_name = os.environ.get('LONG_TERM_DB')
@@ -70,7 +65,7 @@ async def main():
     # either dataframe or TextFileReader (iteratable pandas chunks)
     #! Change chunksize if necessary
     chunksize = None
-    df = await csv_to_pd(filepath=path,
+    df = csv_to_pd(filepath=path,
                 parse_dates=["timestamp"],
                 chunksize=chunksize)
 
@@ -80,7 +75,7 @@ async def main():
                         echo=False,
                         hide_parameters=True)
 
-    url = await db.make_db()
+    await db.make_db() #! FIX!!!
     await db.enable_vectors()
 
     # create table(s)
@@ -94,6 +89,10 @@ async def main():
     trans_cols = ['id', 'timestamp', 'timezone', 'speaker', 'text'] # id instead of trans_id because col name would have already changed to id.
     vectors_cols = ['vec_id', 'id', 'embedding_model', 'embedding_dim', 'embedding', 'index_type', 'index_measurement']
     table_names = ["transcriptions", "vectors"]
+
+
+    logger.info(f"{path}")
+    logger.info(f"{datetime.now()}\n")
 
     if isinstance(df, pd.DataFrame):
         # str to int
@@ -117,13 +116,11 @@ async def main():
             db.pandas_to_postgres(
                 df=trans_df,
                 table_name="transcriptions",
-                logger=logger
             ),
             # vectors
             db.pandas_to_postgres(
                 df=vectors_df,
                 table_name="vectors",
-                logger=logger,
                 dtype = {"embedding": Vector(embedding_dim)}
             )
         ]
@@ -137,9 +134,16 @@ async def main():
                 errors.append(result)
             else:
                 logger.info(f"All data added to {table} table successfully.\n")
-            
+        
+        #! Comment this out if you don't want this
         if errors:
-            raise ExceptionGroup(errors)
+            for i,err in enumerate(errors,1):
+                print(f"Error {i}: {err}\n")
+            raise RuntimeError(f"{len(errors)} errors occured.")
+
+        #! If you want to view full error for debugging, uncomment this
+        # if errors:
+        #     raise ExceptionGroup("Errors", errors)
 
     else: # iterator
         for i, chunk in enumerate(df):
@@ -167,13 +171,11 @@ async def main():
                 db.pandas_to_postgres(
                     df=trans_chunk,
                     table_name="transcriptions",
-                    logger=logger
                 ),
                 # vectors
                 db.pandas_to_postgres(
                     df=vectors_chunk,
                     table_name="vectors",
-                    logger=logger,
                     dtype = {"embedding": Vector(embedding_dim)}
                 )
             ]
@@ -188,13 +190,21 @@ async def main():
                 else:
                     logger.info(f"All data added to {table} table successfully.\n")
 
+            #! Comment this out if you don't want this
             if errors:
-                raise ExceptionGroup(errors)
+                for i,err in enumerate(errors,1):
+                    print(f"Error {i}: {err}\n")
+                raise RuntimeError(f"{len(errors)} errors occured.")
 
+            #! If you want to view full error for debugging, uncomment this
+            # if errors:
+            #     raise ExceptionGroup("Errors", errors)
+    
     # --------------------------
     # Stop docker compose
     # --------------------------
     try:
+        print("Everything added successfully. Press Ctrl+c to shut down.")
         await asyncio.Event().wait()
     except KeyboardInterrupt:
         await close_docker_compose(compose_path="./db/compose.yaml", down=False)

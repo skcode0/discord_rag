@@ -4,7 +4,6 @@ from utils_async import (
     create_program_session_dir, 
     name_and_write_to_csv,
     write_to_csv, 
-    clean_table, 
     close_docker_compose, 
     get_detailed_instruct, 
     create_embedding,
@@ -14,10 +13,9 @@ from datetime import datetime, timezone
 import subprocess
 import discord
 from discord.ext import commands
-from discord import app_commands
 from dotenv import load_dotenv
 import sys
-from tables import CombinedBase, Base, Transcriptions, Vectors, TranscriptionsVectors
+from tables import CombinedBase, TranscriptionsVectors
 from sonyflake import SonyFlake
 import asyncio
 import textwrap
@@ -88,10 +86,10 @@ add_date = input_to_bool(question="Add date? (y/n):", true_options=true_options,
 auto_increment = input_to_bool(question="Add auto increment for file numbering? (y/n): ", true_options=true_options, false_options=false_options)
 
 not_added_csv_path = name_and_write_to_csv(file_path=storage_path,
-                                           file_name=not_added_file_name,
-                                  session_name=program_session,
-                                  add_date = add_date,
-                                  auto_increment=auto_increment)
+                                        file_name=not_added_file_name,
+                                session_name=program_session,
+                                add_date = add_date,
+                                auto_increment=auto_increment)
 
 # This is for saving data in csv regardless of whether data was successfully added to database or not. In other words, this is simply a backup save.
 print("\n--------------------------------------")
@@ -102,33 +100,36 @@ add_date = input_to_bool(question="Add date? (y/n):", true_options=true_options,
 auto_increment = input_to_bool(question="Add auto increment for file numbering? (y/n): ", true_options=true_options, false_options=false_options)
 
 all_records_csv_path = name_and_write_to_csv(file_path=storage_path,
-                                             file_name=all_file_name,
-                                  session_name=program_session,
-                                  add_date = add_date,
-                                  auto_increment=auto_increment)
-
+                                            file_name=all_file_name,
+                                session_name=program_session,
+                                add_date = add_date,
+                                auto_increment=auto_increment)
 
 async def main():
     # --------------------------
     # Create database (+ postgres extensions) and table if not present
     # --------------------------
     #TODO: open up long_term db (for querying only)
-    # short-term long-term db
-    db = AsyncPostgresDataBase(password=pg_password,
+    # long-term db
+    long_db = AsyncPostgresDataBase(password=pg_password,
+                        user=pg_username,
+                        db_name=long_db_name,
+                        port=long_port,
+                        hide_parameters=True)
+
+    # short-term db
+    short_db = AsyncPostgresDataBase(password=pg_password,
+                        user=pg_username,
                         db_name=short_db_name,
                         port=short_port,
                         hide_parameters=True)
 
-    url = await db.make_db()
-    await db.enable_vectors()
+    await short_db.make_db()
+    await short_db.enable_vectors()
 
     # create table(s)
-    async with db.engine.begin() as conn:
+    async with short_db.engine.begin() as conn:
         await conn.run_sync(CombinedBase.metadata.create_all) # prevents duplicate tables
-
-    #TODO: Delete all rows from short_term db if necessary
-    
-
 
     # pk generation 
     #! Change start_date, machine_id if necessary
@@ -167,7 +168,7 @@ async def main():
                         "index_measurement": "vector_cosine_ops", #* change accordingly
                     }
             
-            await db.add_record(table=TranscriptionsVectors, data=data)
+            await short_db.add_record(table=TranscriptionsVectors, data=data)
     except:
         pass
     #! DUMMY DATA
@@ -219,7 +220,7 @@ async def main():
                 try:
                     async with asyncio.TaskGroup() as tg:
                         # add to db
-                        tg.create_task(db.add_record(table=TranscriptionsVectors,data=data))
+                        tg.create_task(short_db.add_record(table=TranscriptionsVectors,data=data))
                         # save in all-data csv
                         tg.create_task(write_to_csv(full_file_path=all_records_csv_path, 
                                     data=data))     
@@ -271,12 +272,15 @@ async def main():
 
         err_message = "Error getting results"
         try:
-            results = await db.query_vector(query=instruct_embedding)
+            #TODO: will change this logic later
+            short_result = await short_db.query_vector(query=instruct_embedding)
+            long_results = await long_db.query_vector(query=instruct_embedding)
         except Exception as e:
             results = err_message
         
         response = "Some llm response"
         #TODO----
+        response = results
 
         limit = 2000 # message char limit
         if len(response) > limit:
@@ -293,13 +297,10 @@ async def main():
         else:
             await interaction.followup.send(f"{interaction.user.mention} {response}")
         
-        
-
-
 
     bot.run(discord_token)
 
 asyncio.run(main())
 
-#* (short-term) Postgres -> csv backups: run 'backups.py'
-#* (long_term) csv -> Postgres: run 'long_term_db.py'
+#* Postgres -> csv and db backups: run 'backups.py'
+#* csv -> Postgres: run 'db_save.py'

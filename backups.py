@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 import os
 import asyncio
 
-#* This is for creating backup (postgres -> csv/gz)
+#* This is for creating backup (postgres -> csv)
 
 #! Change table/db name as needed
 tablename = "transcriptionsvectors"
