@@ -4,7 +4,8 @@ from utils_async import (
     str_to_vec, 
     setLogger, 
     setLogHandler,
-    close_docker_compose
+    close_docker_compose,
+    format_db_error
 )
 import pandas as pd
 from datetime import datetime, timezone
@@ -92,6 +93,7 @@ async def main():
     #! Change to correct table names/cols if necessary
     trans_cols = ['id', 'timestamp', 'timezone', 'speaker', 'text'] # id instead of trans_id because col name would have already changed to id.
     vectors_cols = ['vec_id', 'id', 'embedding_model', 'embedding_dim', 'embedding', 'index_type', 'index_measurement']
+    table_names = ["transcriptions", "vectors"]
 
     if isinstance(df, pd.DataFrame):
         # str to int
@@ -110,22 +112,33 @@ async def main():
         # vectors pk
         vectors_df = vectors_df.rename(columns={'vec_id': 'id'})
 
-        #TODO: make it taskgroup (fail when one fails)
-        async with asyncio.TaskGroup() as tg:
+        tasks = [
+            # transcriptions
+            db.pandas_to_postgres(
+                df=trans_df,
+                table_name="transcriptions",
+                logger=logger
+            ),
+            # vectors
+            db.pandas_to_postgres(
+                df=vectors_df,
+                table_name="vectors",
+                logger=logger,
+                dtype = {"embedding": Vector(embedding_dim)}
+            )
+        ]
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        errors = []
+
+        for table, result in zip(table_names, results):
+            if isinstance(result, Exception): # error
+                logger.error(f"An error occurred while adding data to {table} table: {result}\n")
+            else:
+                logger.info(f"All data added to {table} table successfully.\n")
             
-        # transcriptions
-        await db.pandas_to_postgres(
-            df=trans_df,
-            table_name="transcriptions",
-            logger=logger
-        )
-        # vectors
-        await db.pandas_to_postgres(
-            df=vectors_df,
-            table_name="vectors",
-            logger=logger,
-            dtype = {"embedding": Vector(embedding_dim)}
-        )
+        if errors:
+            raise ExceptionGroup(errors)
 
     else: # iterator
         for i, chunk in enumerate(df):
@@ -147,20 +160,35 @@ async def main():
 
             logger.info(f"Chunk {i} ({len(chunk)} rows): ")
 
-            #TODO: use taskgroup
-            # transcriptions
-            await db.pandas_to_postgres(
-                df=trans_chunk,
-                table_name="transcriptions",
-                logger=logger
-            )
-            # vectors
-            await db.pandas_to_postgres(
-                df=vectors_chunk,
-                table_name="vectors",
-                logger=logger,
-                dtype = {"embedding": Vector(embedding_dim)}
-            )
+
+            tasks = [
+                # transcriptions
+                db.pandas_to_postgres(
+                    df=trans_chunk,
+                    table_name="transcriptions",
+                    logger=logger
+                ),
+                # vectors
+                db.pandas_to_postgres(
+                    df=vectors_chunk,
+                    table_name="vectors",
+                    logger=logger,
+                    dtype = {"embedding": Vector(embedding_dim)}
+                )
+            ]
+
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            errors = []
+
+            for table, result in zip(table_names, results):
+                if isinstance(result, Exception): # error
+                    logger.error(f"An error occurred while adding data to {table} table: {result}\n")
+                    errors.append(result)
+                else:
+                    logger.info(f"All data added to {table} table successfully.\n")
+
+            if errors:
+                raise ExceptionGroup(errors)
 
     # --------------------------
     # Stop docker compose

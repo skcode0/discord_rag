@@ -203,7 +203,6 @@ class AsyncPostgresDataBase:
     async def pandas_to_postgres(self, 
                            df: pd.DataFrame,
                            table_name: str,
-                           logger: logging.Logger,
                            if_exists: str = "append",
                            index: bool = False,
                            dtype = None,
@@ -213,7 +212,6 @@ class AsyncPostgresDataBase:
 
         - df: dataframe
         - table_name: name of table to add data to
-        - logger: for logging transactions
         - if_exists: if table exists, "fail", "replace", or "append". Make sure to have a table with proper relationships/contraints or to_sql will create a new table. 
         - index: write index as column or not
         - dtype: dtype of column(s)
@@ -232,11 +230,8 @@ class AsyncPostgresDataBase:
                         method=method
                     )
                 )
-
-            logger.info(f"All data added to {table_name} table successfully.\n")
         except DBAPIError as e:
             err = format_db_error(e)
-            logger.error("An error occurred while adding data to %s table: %s\n", table_name, err)
             raise RuntimeError(err)
         
 

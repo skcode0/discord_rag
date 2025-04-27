@@ -101,7 +101,7 @@ async def main():
                         db_name=short_db_name,
                         port=short_port,
                         hide_parameters=True)
-
+    
     # Export
     await db.postgres_to_csv(table_name=tablename, output_path=full_path)
     # db backup
