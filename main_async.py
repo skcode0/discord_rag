@@ -20,6 +20,7 @@ import sys
 from tables import CombinedBase, Base, Transcriptions, Vectors, TranscriptionsVectors
 from sonyflake import SonyFlake
 import asyncio
+import textwrap
 
 
 # --------------------------
@@ -273,8 +274,21 @@ async def main():
             results = err_message
         #TODO----
 
+        response = "Some llm response"
 
-        await interaction.followup.send(f"{interaction.user.mention} Chatting...")
+        limit = 2000 # message char limit
+        if len(response) > limit:
+            tw = textwrap.TextWrapper(
+                width=limit,
+                break_long_words=True,
+                break_on_hyphens=True
+            )
+            
+            for i,r in enumerate(tw.wrap(response), 1):
+                await interaction.followup.send(f"Page {i}: {interaction.user.mention} {r}")
+
+        else:
+            await interaction.followup.send(f"{interaction.user.mention} {response}")
         
         
 
