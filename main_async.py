@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 import subprocess
 import discord
 from discord.ext import commands
+from discord import app_commands
 from dotenv import load_dotenv
 import sys
 from tables import CombinedBase, Base, Transcriptions, Vectors, TranscriptionsVectors
@@ -48,6 +49,7 @@ long_port = os.environ.get('LONG_TERM_HOST_PORT')
 
 # discord
 discord_token = os.environ.get('DISCORD_TOKEN')
+discord_server_id = int(os.environ.get('DISCORD_SERVER_ID'))
 
 # HF access token
 hf_token = os.environ.get('hf_token')
@@ -172,81 +174,59 @@ async def main():
     # --------------------------
     # Store Discord messages as embeddings (+ csv files) and call llm with rag to answer user inputs
     # --------------------------
+    GUILD_ID = discord.Object(id=discord_server_id)
     class MyBot(commands.Bot):
         async def on_ready(self):
             print(f"Logged on as {bot.user}!")
 
+            try:
+                synced = await self.tree.sync(guild=GUILD_ID)
+                print(f"Syned {len(synced)} commands to guild {GUILD_ID.id}.")
+            except Exception as e:
+                print(f"Error syncing commands: {e}")
+                raise
+
         async def on_message(self, message):
-            # Create embedding
-            # Note: Some embedding models like 'intfloat/multilingual-e5-large-instruct' require instructions to be added to query. Documents don't need instructions.
-            task = "Given user's message query, retrieve relevant messages that answer the query."
-            # instruct_query = get_detailed_instruct(query=message.content,
-            #                                         task_description=task)
-            # # for querying
-            # instruct_embedding = create_embedding(model_name=embedding_model,
-            #                                       input=instruct_query)
-            
+            if message.content != "":
+                # for storage
+                # embedding_vector = await create_embedding(model_name=embedding_model,
+                #                                     input=f"{message.created_at.strftime("%Y-%m-%d %H:%M:%S")}: {message.content}").tolist()
 
-            # for storage
-            # embedding_vector = create_embedding(model_name=embedding_model,
-            #                                     input=f"{message.created_at.strftime("%Y-%m-%d %H:%M:%S")}: {message.content}").tolist()
+                #! DUMMY DATA
+                embedding_vector = [-5.1, 2.9, 0.8, 7.9, 3.1] # fruit
+                #! DUMMY DATA
 
-            #! DUMMY DATA
-            instruct_embedding = [-5.1, 2.9, 0.8, 7.9, 3.1] # fruit
-            embedding_vector = [-5.1, 2.9, 0.8, 7.9, 3.1] # fruit
-            #! DUMMY DATA
+                data = {
+                    # Transcriptions
+                    "trans_id": message.id, # snowflake id
+                    "timestamp": message.created_at,
+                    "timezone": "CT", #* change accordingly
+                    "speaker": str(message.author),
+                    "text": message.content,
 
-            data = {
-                # Transcriptions
-                "trans_id": message.id, # snowflake id
-                "timestamp": message.created_at,
-                "timezone": "CT", #* change accordinly
-                "speaker": str(message.author),
-                "text": message.content,
-
-                # Vectors
-                "vec_id": sf.next_id(),
-                "embedding_model": embedding_model,
-                "embedding_dim": embedding_dim,
-                "embedding": embedding_vector,
-                "index_type": "StreamingDiskAnn", #* change accordingly
-                "index_measurement": "vector_cosine_ops", #* change accordingly
-            }
-
-            # TODO: Call llm/langgraph for response and conditional querying
-            #! prob need to change logic here
-            err_message = "Error getting results"
-            try:
-                results = await db.query_vector(query=instruct_embedding)
-            except Exception as e:
-                results = err_message
-            #TODO----
-            
-
-            #TODO: use taskgroup for multiple async and error handling
-            # ignore replaying to itself
-            if message.author != bot.user:
-                try:
-                    await message.reply(f"These are the results: \n {results}", mention_author=True)
-                except Exception as e:
-                    print(e)
-                    await message.reply(err_message, mention_author=True)
-
-            try:
-                await db.add_record(table=TranscriptionsVectors,data=data)
-                # save in all-data csv
-                await write_to_csv(full_file_path=all_records_csv_path, 
-                            data=data)
+                    # Vectors
+                    "vec_id": sf.next_id(),
+                    "embedding_model": embedding_model,
+                    "embedding_dim": embedding_dim,
+                    "embedding": embedding_vector,
+                    "index_type": "StreamingDiskAnn", #* change accordingly
+                    "index_measurement": "vector_cosine_ops", #* change accordingly
+                }
                 
-            except Exception as e:
-                print("Error: ", e)
-                # save in not-added csv
-                await write_to_csv(full_file_path=not_added_csv_path, 
-                            data=data)  
-            #TODO------
+                try:
+                    async with asyncio.TaskGroup() as tg:
+                        # add to db
+                        tg.create_task(db.add_record(table=TranscriptionsVectors,data=data))
+                        # save in all-data csv
+                        tg.create_task(write_to_csv(full_file_path=all_records_csv_path, 
+                                    data=data))     
+                except* Exception as eg:
+                    for e in eg.exceptions:
+                        print("Error:", e)
+                    # save in not-added csv
+                    await write_to_csv(full_file_path=not_added_csv_path, 
+                                data=data)
 
-        #TODO: Slash Commands and Deferred Replies
-        #TODO: https://www.youtube.com/watch?v=JN5ya4mMkek
         
         # custom clean up when KeyboardInterrupted
         # https://stackoverflow.com/questions/69682471/how-do-i-gracefully-handle-ctrl-c-and-shutdown-discord-py-bot
@@ -261,6 +241,45 @@ async def main():
 
 
     bot = MyBot(command_prefix="/", intents=discord.Intents.all())
+
+
+    # Slash Commands and Deferred Replies
+    # https://www.youtube.com/watch?v=JN5ya4mMkek
+    GUILD_ID = discord.Object(id=discord_server_id)
+    @bot.tree.command(name="chat", description="Chat with AI bot.", guild=GUILD_ID)
+    async def chat(interaction: discord.Interaction, text: str):
+        await interaction.response.defer()
+        
+        # TODO: Call llm/langgraph for response and conditional querying
+
+        # Create embedding
+        # Note: Some embedding models like 'intfloat/multilingual-e5-large-instruct' require instructions to be added to query. Documents don't need instructions.
+        #! Delete/edit query embedding instruction as needed.
+        task = "Given user's message query, retrieve relevant messages that answer the query."
+        # instruct_query = get_detailed_instruct(query=message.content,
+        #                                         task_description=task)
+        # # for querying
+        # instruct_embedding = create_embedding(model_name=embedding_model,
+        #                                       input=instruct_query)
+
+        #! DUMMY DATA
+        instruct_embedding = [-5.1, 2.9, 0.8, 7.9, 3.1] # fruit
+        #! DUMMY DATA
+
+        err_message = "Error getting results"
+        try:
+            results = await db.query_vector(query=instruct_embedding)
+        except Exception as e:
+            results = err_message
+        #TODO----
+
+
+        await interaction.followup.send(f"{interaction.user.mention} Chatting...")
+        
+        
+
+
+
     bot.run(discord_token)
 
 asyncio.run(main())
