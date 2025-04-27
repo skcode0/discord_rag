@@ -648,7 +648,6 @@ def write_to_csv(full_file_path: str,
             writer.writerows(data) # multiple
 
 
-#TODO: async
 async def write_to_csv_async(full_file_path: str, 
                  data: Union[Dict[str, Any], List[Dict[str, Any]]]) -> None:
     """
@@ -865,7 +864,7 @@ def update_file_num_pkl(dir_path: str = './',
 
     return pkl_file_path
         
-#TODO: async
+
 def csv_to_pd(filepath: str, 
               chunksize: Optional[int] = None,
               parse_dates: Union[
@@ -913,7 +912,7 @@ def str_to_vec(s: str, to_list=False) -> Union[np.ndarray, list]:
 
     return result
 
-#TODO: async???
+
 LogLevelStr = Literal["NOTSET", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 LogLevelInt = Literal[0, 10, 20, 30, 40, 50]
 LogLevel = Union[LogLevelStr, LogLevelInt]
@@ -996,8 +995,7 @@ def format_db_error(e: DBAPIError) -> str:
 # --------------------------
 # Handling shutdown
 # --------------------------
-#TODO: async
-def clean_table(db: PostgresDataBase, 
+async def clean_table(db: AsyncPostgresDataBase, 
                 tablename: str,
                 truncate: bool = True) -> None:
     """
@@ -1009,9 +1007,9 @@ def clean_table(db: PostgresDataBase,
     """
     try:
         if truncate:
-            db.truncate_all_rows(tablename=tablename)
+            await db.truncate_all_rows(tablename=tablename)
         else:
-            db.delete_all_rows(tablename=tablename)
+            await db.delete_all_rows(tablename=tablename)
         print(f"All rows successfully removed from '{tablename}' table.")
     except Exception as e:
         print(f"Could not delete all rows from '{tablename}' table. Error: {e}")
@@ -1090,6 +1088,7 @@ def create_embedding(model_name: str,
 
         Returns NORMALIZED numpy array of vector embedding
     """
+    #TODO: use lru cache? don't load this every time func is called 
     model = SentenceTransformer(model_name)
 
     embeddings = model.encode(input, convert_to_tensor=False, normalize_embeddings=True)
