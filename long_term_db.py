@@ -110,7 +110,7 @@ async def main():
         # vectors pk
         vectors_df = vectors_df.rename(columns={'vec_id': 'id'})
 
-        #TODO: make it taskgroup
+        #TODO: make it taskgroup (fail when one fails)
         async with asyncio.TaskGroup() as tg:
             
         # transcriptions
