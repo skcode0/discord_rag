@@ -134,6 +134,7 @@ async def main():
         for table, result in zip(table_names, results):
             if isinstance(result, Exception): # error
                 logger.error(f"An error occurred while adding data to {table} table: {result}\n")
+                errors.append(result)
             else:
                 logger.info(f"All data added to {table} table successfully.\n")
             
