@@ -103,10 +103,11 @@ async def main():
     dump_name = f"{tablename}.dump"
     dump_full_path = copy_path + f"/{dump_name}"
 
+    logger.info(f"{today}")
 
     tasks = [
         # export as csv
-        # db.postgres_to_csv(table_name=tablename, output_path=full_path)
+        db.postgres_to_csv(table_name=tablename, output_path=full_path),
 
         # db dump
         # document: https://www.postgresql.org/docs/current/app-pgdump.html
@@ -114,7 +115,7 @@ async def main():
         db.dump_postgres(backup_path=dump_full_path, 
                          database_name=short_db_name,
                          host="localhost",
-                         port=5432, 
+                         port=5432, # container port (not host)
                          username=pg_username,
                          F="c",
                          docker=True,
@@ -125,24 +126,23 @@ async def main():
     results = await asyncio.gather(*tasks, return_exceptions=True)
     errors = []
 
-    logger.info(f"{today}\n")
-
     for result in results:
         if isinstance(result, Exception): # error
             logger.error(result)
             errors.append(result)
-        else:
-            logger.info(f"{result}\n")
+    
+    if not errors:
+        logger.info("Everything successfully completed.\n")
         
     #! Comment this out if you don't want this
-    # if errors:
-    #     for i,err in enumerate(errors,1):
-    #         print(f"Error {i}: {err}\n")
-    #     raise RuntimeError(f"{len(errors)} errors occured.")
+    if errors:
+        for i,err in enumerate(errors,1):
+            print(f"Error {i}: {err}\n")
+        raise RuntimeError(f"{len(errors)} errors occured.")
 
     #! If you want to view full error for debugging, uncomment this
-    if errors:
-        raise ExceptionGroup("Errors", errors)
+    # if errors:
+    #     raise ExceptionGroup("Errors", errors)
 
 
     # Clean table (delete all rows)

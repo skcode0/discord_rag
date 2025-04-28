@@ -234,7 +234,6 @@ class AsyncPostgresDataBase:
             raise RuntimeError(err)
         
 
-    # TODO: fix async
     async def postgres_to_csv(self, 
                         table_name: str, 
                         output_path: str) -> None:
@@ -246,28 +245,27 @@ class AsyncPostgresDataBase:
 
         """
         try:
-            copy_sql = f"COPY {table_name} TO STDOUT WITH CSV HEADER"
-
             async with self.engine.connect() as conn:
-                async with conn.begin():
-                    raw_conn = await conn.get_raw_connection()
-                
+                raw_conn = await conn.get_raw_connection()
+                pgconn = raw_conn.driver_connection  # access the actual asyncpg connection
+
                 # write to file
                 async with aiofiles.open(output_path, mode="wb") as f:
-                    # TODO: FIX
-                    await raw_conn.copy_to(f, copy_sql)
-
-                    async with raw_conn.cursor() as cur:
-                        async with cur.copy(copy_sql) as stream:
-                            async for chunk in stream:
-                                await f.write(chunk)
+                    async def writer(data):
+                        await f.write(data)
+                    
+                    await pgconn.copy_from_table(
+                    table_name,
+                    output=writer,
+                    format='csv',
+                    header=True)
             
             print(f"Backup csv created at {output_path}")
         except Exception as e:
             print("Backup csv error:", e)
             raise
 
-    #TODO: get rid of docker stuff here
+
     async def dump_postgres(self, 
                             backup_path: str, 
                             database_name: str,
@@ -282,9 +280,9 @@ class AsyncPostgresDataBase:
                             compress: bool = True, compress_level: Optional[int] = None
                             ) -> None:
         """
-        Uses shell to dump postgres database.
-        Note: Password will be asked.
-        Note: If using docker, you'll need docker compose (yaml)
+        Uses shell to dump postgres database. If database is in docker, it will file to host system (as long as right docker parameters are inputted).
+        Note: Password may be asked.
+        Note: If using docker, you'll need docker compose (yaml).
 
         - backup_path: path for backup file output
         - database_name: name of database to back up
