@@ -72,8 +72,6 @@ handler = setLogHandler(log_dir=copy_path,
                         setLevel='INFO')
 logger.addHandler(handler)
 
-logger.info(f"{today}\n")
-
 
 # --------------------------
 # Create copy
@@ -112,6 +110,8 @@ async def main():
     results = await asyncio.gather(*tasks, return_exceptions=True)
     errors = []
 
+    logger.info(f"{today}\n")
+
     for result in results:
         if isinstance(result, Exception): # error
             logger.error(result)
@@ -133,8 +133,11 @@ async def main():
     # Stop docker compose
     # --------------------------
     try:
+        print("Everything added successfully. Press Ctrl+c to shut down.")
         await asyncio.Event().wait()
-    except KeyboardInterrupt:
+    except (asyncio.CancelledError, KeyboardInterrupt) as e:
+        print("Shutting down...")
+    finally:
         await close_docker_compose(compose_path="./db/compose.yaml", down=False)
 
 

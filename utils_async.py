@@ -1,8 +1,9 @@
-from sqlalchemy import text
+from sqlalchemy import text, create_engine
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy_utils import database_exists, create_database
-from sqlalchemy.exc import DBAPIError
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.exc import DBAPIError, ProgrammingError
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlalchemy.engine.url import make_url
 from asyncio.subprocess import PIPE
 import asyncio
 import aiofiles
@@ -21,6 +22,7 @@ import pandas as pd
 import numpy as np
 from pandas.io.parsers import TextFileReader
 import logging
+import contextlib
 # from sentence_transformers import SentenceTransformer
 
 
@@ -53,25 +55,25 @@ class AsyncPostgresDataBase:
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
 
     #TODO: fix
-    async def make_db(self) -> None:
+    def make_db(self) -> None:
         """
         If database doesn't exist, create one.
         Reference: Connect to PostgreSQL Using SQLAlchemy & Python (https://www.youtube.com/watch?v=neW9Y9xh4jc)
 
         Returns postgres url
         """
-        async with self.engine.connect() as conn:
-            result = await conn.execute(
-                text("SELECT 1 FROM pg_catalog.pg_database WHERE datname = :dbname"), 
-                {"dbname": self.db_name})
-            exists = result.scalar() is not None
+        sync_url = f'postgresql+psycopg://{self.user}:{self.password}@{self.host}:{self.port}/{self.db_name}'
 
-            if not exists:
-                await conn.execute(text(f"CREATE DATABASE {self.db_name}"))
-                print(f"Database {self.db_name} has been sucessfully created.")
-            else:
-                print(f"The database with '{self.db_name}' name already exists.")
-    
+        sync_engine = create_engine(sync_url)
+
+        if not database_exists(sync_url):
+            create_database(sync_url)
+            print(f"Database {self.db_name} has been sucessfully created.")
+        else:
+            print(f"The database with '{self.db_name}' name already exists.")
+
+        sync_engine.dispose()
+
         
     async def enable_vectors(self) -> None:
         """
@@ -297,13 +299,12 @@ class AsyncPostgresDataBase:
             *cmd,
             stdout=PIPE,
             stderr=PIPE,
-            text=True
         )
 
         stdout, stderr = await proc.communicate()
 
         if proc.returncode != 0:
-            raise RuntimeError(f"pg_dump failed: {stderr.strip()}")
+            raise RuntimeError(f"pg_dump failed: {stderr.decode().strip()}")
         else:
              print(f"Backup completed successfully. Output saved to {backup_path}")
 
@@ -1007,7 +1008,6 @@ async def clean_table(db: AsyncPostgresDataBase,
         print(f"Could not delete all rows from '{tablename}' table. Error: {e}")
 
 
-#TODO: need to fix
 async def close_docker_compose(compose_path: str = "db/compose.yaml", down: bool = True) -> None:
     """
     Closes docker compose container(s).
@@ -1023,12 +1023,12 @@ async def close_docker_compose(compose_path: str = "db/compose.yaml", down: bool
         choice = "stop"
 
     command = ["docker", "compose", "-f", compose_path, choice]
-    proc = await asyncio.create_subprocess_exec(*command, stdout=PIPE, stderr=PIPE, text=True)
+    proc = await asyncio.create_subprocess_exec(*command, stdout=PIPE, stderr=PIPE)
 
     stdout, stderr = await proc.communicate()
 
     if proc.returncode != 0:
-        raise RuntimeError(f"Docker stop failed (code={proc.returncode}): {stderr.strip()}")
+        raise RuntimeError(f"Docker stop failed (code={proc.returncode}): {stderr.decode().strip()}")
     else:
         print("Docker Compose stopped successfully.")
 

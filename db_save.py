@@ -75,7 +75,7 @@ async def main():
                         echo=False,
                         hide_parameters=True)
 
-    await db.make_db() #! FIX!!!
+    db.make_db()
     await db.enable_vectors()
 
     # create table(s)
@@ -206,7 +206,9 @@ async def main():
     try:
         print("Everything added successfully. Press Ctrl+c to shut down.")
         await asyncio.Event().wait()
-    except KeyboardInterrupt:
+    except (asyncio.CancelledError, KeyboardInterrupt) as e:
+        print("Shutting down...")
+    finally:
         await close_docker_compose(compose_path="./db/compose.yaml", down=False)
 
 asyncio.run(main())
