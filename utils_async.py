@@ -267,16 +267,20 @@ class AsyncPostgresDataBase:
             print("Backup csv error:", e)
             raise
 
-
+    #TODO: get rid of docker stuff here
     async def dump_postgres(self, 
                             backup_path: str, 
                             database_name: str,
                             host:str,
                             port: int,
                             username: str,
+                            docker: bool = False,
+                            docker_service_name: Optional[str] = None,
+                            docker_yaml_location: Optional[str] = None,
                             F: str = "p", 
                             blob: bool = True, 
-                            compress: bool = True, compress_level: Optional[int] = None) -> None:
+                            compress: bool = True, compress_level: Optional[int] = None
+                            ) -> None:
         """
         Uses subprocess to dump postgres database.
         Note: Password will be asked.
@@ -292,7 +296,17 @@ class AsyncPostgresDataBase:
         - compress_level: If compress = True, what level should the compress be (0-9)? When None, it will default to 6.
         
         """
-        cmd = ["pg_dump", "-h", host, "-p", str(port), "-U", username,  "-F", F]
+        cmd = ["pg_dump", "-h", host, "-p", str(port), "-U", username, "-F", F]
+
+        if docker:
+            d = ["docker-compose"]
+
+            if docker_yaml_location or docker_yaml_location != "":
+                d += ["-f", docker_yaml_location]
+            
+            d += ["exec", "-T", docker_service_name]
+
+        cmd = d + cmd
 
         if blob:
             cmd.append("-b")
@@ -306,7 +320,7 @@ class AsyncPostgresDataBase:
 
         cmd += ["-f", backup_path]
         cmd.append(database_name)
-        
+        print(*cmd)
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=PIPE,
@@ -319,6 +333,10 @@ class AsyncPostgresDataBase:
             raise RuntimeError(f"pg_dump failed: {stderr.decode().strip()}")
         else:
              print(f"Backup completed successfully. Output saved to {backup_path}")
+
+    #TODO: dump pg in tmp -> copy to host dir
+    async def docker_dump_postgres():
+
 
 
 # --------------------------

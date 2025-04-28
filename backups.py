@@ -19,7 +19,6 @@ import asyncio
 
 #! Change table/db name as needed
 tablename = "transcriptionsvectors"
-db_name = "short_term_db"
 true_options = ["yes", "y"]
 false_options = ["no", "n"]
 
@@ -46,9 +45,9 @@ Path(copy_path).mkdir(parents=True, exist_ok=True)
 # --------------------------
 # Docker Compose
 # --------------------------
-#! Change db if needed
-db = "short_term_db"
-command = ["docker", "compose", "-f", "db/compose.yaml", "up", "-d", db]
+#! Change service name if needed
+service_name = "short_term_db"
+command = ["docker", "compose", "-f", "db/compose.yaml", "up", "-d", service_name]
 
 try:
     result = subprocess.run(command, check=True, capture_output=True, text=True)
@@ -58,7 +57,7 @@ except subprocess.CalledProcessError as e:
     print("Error running docker-compose:", e.stderr)
     sys.exit(1)
 
-print(f"Connected to {db} database.")
+print(f"Connected to {service_name}.")
 
 # --------------------------
 # Set up logging
@@ -104,18 +103,23 @@ async def main():
     dump_name = f"{tablename}.dump"
     dump_full_path = copy_path + f"/{dump_name}"
 
+
     tasks = [
         # export as csv
-        db.postgres_to_csv(table_name=tablename, output_path=full_path),
-        # db backup
+        # db.postgres_to_csv(table_name=tablename, output_path=full_path)
+
+        # db dump
         # document: https://www.postgresql.org/docs/current/app-pgdump.html
         # time measurements: https://dan.langille.org/2013/06/10/using-compression-with-postgresqls-pg_dump/
         db.dump_postgres(backup_path=dump_full_path, 
-                         database_name=db_name,
+                         database_name=short_db_name,
                          host="localhost",
                          port=short_port,
                          username=pg_username,
-                         F="c")
+                         F="c",
+                         docker=True,
+                         docker_service_name=service_name,
+                         docker_yaml_location="db/compose.yaml")
     ]
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
