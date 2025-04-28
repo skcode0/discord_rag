@@ -46,7 +46,9 @@ Path(copy_path).mkdir(parents=True, exist_ok=True)
 # --------------------------
 # Docker Compose
 # --------------------------
-command = ["docker", "compose", "-f", "db/compose.yaml", "up", "-d", "short_term_db"]
+#! Change db if needed
+db = "short_term_db"
+command = ["docker", "compose", "-f", "db/compose.yaml", "up", "-d", db]
 
 try:
     result = subprocess.run(command, check=True, capture_output=True, text=True)
@@ -56,6 +58,8 @@ except subprocess.CalledProcessError as e:
     print("Error running docker-compose:", e.stderr)
     sys.exit(1)
 
+print(f"Connected to {db} database.")
+
 # --------------------------
 # Set up logging
 # ref: https://www.youtube.com/watch?v=urrfJgHwIJA
@@ -64,7 +68,7 @@ today = datetime.now()
 today_str = today.strftime("%Y-%m-%d")
 
 logger = setLogger(setLevel = 'INFO')
-log_filename = f'{today_str}.log'
+log_filename = f'backup_{today_str}.log'
 
 handler = setLogHandler(log_dir=copy_path,
                         log_filename=log_filename,
@@ -77,11 +81,11 @@ logger.addHandler(handler)
 # Create copy
 # --------------------------
 # get valid file name
-file_name = "copy"
+file_name = ""
 while True:
-    file_name = input("Give valid backup file name without file extension: ")
+    file_name = input("Give valid and unique backup file name without file extension: ")
     while not is_valid_windows_name(file_name):
-        file_name = input("Give valid backup file name without file extension: ")
+        file_name = input("Give valid and unique backup file name without file extension: ")
 
     file_name += ".csv"
 
@@ -96,14 +100,21 @@ async def main():
                         port=short_port,
                         hide_parameters=True)
 
+    #! Change dump name as needed
+    dump_name = f"{tablename}.dump"
+    dump_full_path = copy_path + f"/{dump_name}"
+
     tasks = [
         # export as csv
         db.postgres_to_csv(table_name=tablename, output_path=full_path),
         # db backup
         # document: https://www.postgresql.org/docs/current/app-pgdump.html
         # time measurements: https://dan.langille.org/2013/06/10/using-compression-with-postgresqls-pg_dump/
-        db.dump_postgres(backup_path=copy_path, 
-                         database_name=db_name, 
+        db.dump_postgres(backup_path=dump_full_path, 
+                         database_name=db_name,
+                         host="localhost",
+                         port=short_port,
+                         username=pg_username,
                          F="c")
     ]
 
@@ -117,10 +128,17 @@ async def main():
             logger.error(result)
             errors.append(result)
         else:
-            logger.info(f"Backup successful in {copy_path}.\n")
+            logger.info(f"{result}\n")
         
+    #! Comment this out if you don't want this
+    # if errors:
+    #     for i,err in enumerate(errors,1):
+    #         print(f"Error {i}: {err}\n")
+    #     raise RuntimeError(f"{len(errors)} errors occured.")
+
+    #! If you want to view full error for debugging, uncomment this
     if errors:
-        raise ExceptionGroup(errors)
+        raise ExceptionGroup("Errors", errors)
 
 
     # Clean table (delete all rows)

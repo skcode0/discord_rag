@@ -234,6 +234,7 @@ class AsyncPostgresDataBase:
             raise RuntimeError(err)
         
 
+    # TODO: fix async
     async def postgres_to_csv(self, 
                         table_name: str, 
                         output_path: str) -> None:
@@ -247,40 +248,51 @@ class AsyncPostgresDataBase:
         try:
             copy_sql = f"COPY {table_name} TO STDOUT WITH CSV HEADER"
 
-            with self.engine.connect() as conn:
+            async with self.engine.connect() as conn:
                 async with conn.begin():
                     raw_conn = await conn.get_raw_connection()
                 
                 # write to file
                 async with aiofiles.open(output_path, mode="wb") as f:
+                    # TODO: FIX
+                    await raw_conn.copy_to(f, copy_sql)
+
                     async with raw_conn.cursor() as cur:
                         async with cur.copy(copy_sql) as stream:
                             async for chunk in stream:
                                 await f.write(chunk)
             
-            print(f"Backup created at {output_path}")
+            print(f"Backup csv created at {output_path}")
         except Exception as e:
-            print("Backup error:", e)
+            print("Backup csv error:", e)
+            raise
 
 
     async def dump_postgres(self, 
                             backup_path: str, 
-                            database_name: str, 
+                            database_name: str,
+                            host:str,
+                            port: int,
+                            username: str,
                             F: str = "p", 
                             blob: bool = True, 
                             compress: bool = True, compress_level: Optional[int] = None) -> None:
         """
-        Uses subprocess to dump postgres database. 
+        Uses subprocess to dump postgres database.
+        Note: Password will be asked.
 
         - backup_path: path for backup file output
         - database_name: name of database to back up
+        - host: name of host
+        - port: port number
+        - username: PostgreSQL username
         - F: format of backup. Defaults to (p)lain. Other formats will require pg_restore when restoring db.
         - blob: include large objects (BLOBs) or not
         - compress:  
         - compress_level: If compress = True, what level should the compress be (0-9)? When None, it will default to 6.
-            
+        
         """
-        cmd = ["pg_dump", "-F", F]
+        cmd = ["pg_dump", "-h", host, "-p", str(port), "-U", username,  "-F", F]
 
         if blob:
             cmd.append("-b")
