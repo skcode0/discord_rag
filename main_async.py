@@ -3,7 +3,7 @@ from utils_async import (
     AsyncPostgresDataBase, 
     create_program_session_dir, 
     name_and_write_to_csv,
-    write_to_csv, 
+    write_to_csv_async, 
     close_docker_compose, 
     get_detailed_instruct, 
     create_embedding,
@@ -19,7 +19,7 @@ from tables import CombinedBase, TranscriptionsVectors
 from sonyflake import SonyFlake
 import asyncio
 import textwrap
-
+import pytz
 
 # --------------------------
 # start Docker Compose command for DBs (only short term)
@@ -136,6 +136,8 @@ sf = SonyFlake(start_time=start_time, machine_id=lambda: 1)
 # --------------------------
 # Store Discord messages as embeddings (+ csv files) and call llm with rag to answer user inputs
 # --------------------------
+local_timezone = pytz.timezone('America/Chicago')
+
 GUILD_ID = discord.Object(id=discord_server_id)
 class MyBot(commands.Bot):
     async def on_ready(self):
@@ -163,8 +165,7 @@ class MyBot(commands.Bot):
             data = {
                 # Transcriptions
                 "trans_id": message.id, # snowflake id
-                "timestamp": message.created_at,
-                "timezone": "CT", #* change accordingly
+                "timestamp": message.created_at, # UTC
                 "speaker": str(message.author),
                 "text": message.content,
 
@@ -176,20 +177,19 @@ class MyBot(commands.Bot):
                 "index_type": "StreamingDiskAnn", #* change accordingly
                 "index_measurement": "vector_cosine_ops", #* change accordingly
             }
-            
-            #TODO: fix
+
             try:
                 async with asyncio.TaskGroup() as tg:
                     # add to db
                     tg.create_task(short_db.add_record(table=TranscriptionsVectors,data=data))
                     # save in all-data csv
-                    tg.create_task(write_to_csv(full_file_path=all_records_csv_path, 
-                                data=data))     
+                    tg.create_task(write_to_csv_async(full_file_path=all_records_csv_path, 
+                                data=data))
             except* Exception as eg:
                 for e in eg.exceptions:
                     print("Error:", e)
                 # save in not-added csv
-                await write_to_csv(full_file_path=not_added_csv_path, 
+                await write_to_csv_async(full_file_path=not_added_csv_path, 
                             data=data)
 
     
@@ -215,8 +215,43 @@ GUILD_ID = discord.Object(id=discord_server_id)
 async def chat(interaction: discord.Interaction, text: str):
     await interaction.response.defer()
     
+    # Save user's slash command into db
     #TODO: store slash command text in db
+    #! DUMMY DATA
+    embedding_vector = [-0.1, 4.3, 45.8, -37.94, 1.1]
+    #! DUMMY DATA
 
+    data = {
+        # Transcriptions
+        "trans_id": interaction.id, # snowflake id
+        "timestamp": interaction.created_at, # UTC
+        "speaker": interaction.user,
+        "text": text,
+
+        # Vectors
+        "vec_id": sf.next_id(),
+        "embedding_model": embedding_model,
+        "embedding_dim": embedding_dim,
+        "embedding": embedding_vector,
+        "index_type": "StreamingDiskAnn", #* change accordingly
+        "index_measurement": "vector_cosine_ops", #* change accordingly
+    }
+
+    try:
+        async with asyncio.TaskGroup() as tg:
+            # add to db
+            tg.create_task(short_db.add_record(table=TranscriptionsVectors,data=data))
+            # save in all-data csv
+            tg.create_task(write_to_csv_async(full_file_path=all_records_csv_path, 
+                        data=data))
+    except* Exception as eg:
+        for e in eg.exceptions:
+            print("Error:", e)
+        # save in not-added csv
+        await write_to_csv_async(full_file_path=not_added_csv_path, 
+                    data=data)
+
+    # Save bot response
     # TODO: Call llm/langgraph for response and conditional querying
 
     # Create embedding
@@ -289,8 +324,7 @@ async def main():
             data = {
                         # Transcriptions
                         "trans_id": snowflake_id[i],
-                        "timestamp": datetime.now(),
-                        "timezone": "CT", #* change accordinly,
+                        "timestamp": datetime.now(timezone.utc),
                         "speaker": f"user_{i}",
                         "text": emb[i][0],
 
@@ -302,10 +336,10 @@ async def main():
                         "index_type": "StreamingDiskAnn", #* change accordingly
                         "index_measurement": "vector_cosine_ops", #* change accordingly
                     }
-            #TODO: fix (didn't add)
+
             await short_db.add_record(table=TranscriptionsVectors, data=data)
     except Exception as e:
-        raise e
+        # raise e
         pass
     #! DUMMY DATA
 
@@ -315,10 +349,9 @@ async def main():
         await bot.close()
         sys.exit(0)
 
-# try:
+
 asyncio.run(main())
-# except (asyncio.CancelledError, KeyboardInterrupt) as e:
-#     print("Shutting down...")
+
 
 #* Postgres -> csv and db backups: run 'backups.py'
 #* csv -> Postgres: run 'db_save.py'

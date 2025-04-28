@@ -1,4 +1,4 @@
-from sqlalchemy import Index, ForeignKey, UniqueConstraint, BigInteger
+from sqlalchemy import Index, ForeignKey, UniqueConstraint, BigInteger, DateTime
 from sqlalchemy.orm import DeclarativeBase, mapped_column, Mapped, relationship
 from datetime import datetime
 from pgvector.sqlalchemy import Vector
@@ -17,8 +17,7 @@ class Base(DeclarativeBase):
 class Transcriptions(Base):
     __tablename__ = "transcriptions"
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
-    timestamp: Mapped[datetime]
-    timezone: Mapped[str] = mapped_column(nullable=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True)) # timezone aware
     speaker: Mapped[str]
     text: Mapped[str]
     vector: Mapped["Vectors"] = relationship(back_populates="transcription", uselist=False, cascade="all, delete-orphan")
@@ -67,8 +66,7 @@ class CombinedBase(DeclarativeBase):
 class TranscriptionsVectors(CombinedBase):
     __tablename__ = "transcriptionsvectors"
     trans_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
-    timestamp: Mapped[datetime]
-    timezone: Mapped[str] = mapped_column(nullable=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True)) # timezone aware
     speaker: Mapped[str]
     text: Mapped[str]
 
