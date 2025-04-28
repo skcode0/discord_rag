@@ -95,7 +95,7 @@ class AsyncPostgresDataBase:
         """
         try:
             async with self.Session() as session: # auto-closes session
-                await session.add(table(**data))
+                session.add(table(**data)) # has to be sync (?)
                 await session.commit()
         except DBAPIError as e:
             await session.rollback()

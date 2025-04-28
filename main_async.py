@@ -105,36 +105,171 @@ all_records_csv_path = name_and_write_to_csv(file_path=storage_path,
                                 add_date = add_date,
                                 auto_increment=auto_increment)
 
+
+ # --------------------------
+# Create database (+ postgres extensions) and table if not present
+# --------------------------
+# long-term db (for querying only)
+long_db = AsyncPostgresDataBase(password=pg_password,
+                    user=pg_username,
+                    db_name=long_db_name,
+                    port=long_port,
+                    hide_parameters=True)
+
+
+# short-term db
+short_db = AsyncPostgresDataBase(password=pg_password,
+                    user=pg_username,
+                    db_name=short_db_name,
+                    port=short_port,
+                    hide_parameters=True)
+
+short_db.make_db()
+
+
+# pk generation 
+#! Change start_date, machine_id if necessary
+start_time = datetime(2025,1,1,tzinfo=timezone.utc)
+sf = SonyFlake(start_time=start_time, machine_id=lambda: 1)
+
+
+# --------------------------
+# Store Discord messages as embeddings (+ csv files) and call llm with rag to answer user inputs
+# --------------------------
+GUILD_ID = discord.Object(id=discord_server_id)
+class MyBot(commands.Bot):
+    async def on_ready(self):
+        print(f"Logged on as {bot.user}!")
+
+        try:
+            synced = await self.tree.sync(guild=GUILD_ID)
+            print(f"Syned {len(synced)} commands to guild {GUILD_ID.id}.")
+        except Exception as e:
+            print(f"Error syncing commands: {e}")
+            raise
+
+    async def on_message(self, message):
+        # Note: If only images/videos/audio/gifs or any other attachments sent, text content will be empty.
+        # Note: If storing unstructured data, use multi-modal embedding model (and data lake).
+        if message.content != "":
+            # for storage
+            # embedding_vector = await create_embedding(model_name=embedding_model,
+            #                                     input=f"{message.created_at.strftime("%Y-%m-%d %H:%M:%S")}: {message.content}").tolist()
+
+            #! DUMMY DATA
+            embedding_vector = [-5.1, 2.9, 0.8, 7.9, 3.1] # fruit
+            #! DUMMY DATA
+
+            data = {
+                # Transcriptions
+                "trans_id": message.id, # snowflake id
+                "timestamp": message.created_at,
+                "timezone": "CT", #* change accordingly
+                "speaker": str(message.author),
+                "text": message.content,
+
+                # Vectors
+                "vec_id": sf.next_id(),
+                "embedding_model": embedding_model,
+                "embedding_dim": embedding_dim,
+                "embedding": embedding_vector,
+                "index_type": "StreamingDiskAnn", #* change accordingly
+                "index_measurement": "vector_cosine_ops", #* change accordingly
+            }
+            
+            #TODO: fix
+            try:
+                async with asyncio.TaskGroup() as tg:
+                    # add to db
+                    tg.create_task(short_db.add_record(table=TranscriptionsVectors,data=data))
+                    # save in all-data csv
+                    tg.create_task(write_to_csv(full_file_path=all_records_csv_path, 
+                                data=data))     
+            except* Exception as eg:
+                for e in eg.exceptions:
+                    print("Error:", e)
+                # save in not-added csv
+                await write_to_csv(full_file_path=not_added_csv_path, 
+                            data=data)
+
+    
+    # custom clean up when KeyboardInterrupted
+    # https://stackoverflow.com/questions/69682471/how-do-i-gracefully-handle-ctrl-c-and-shutdown-discord-py-bot
+    async def async_cleanup(self):
+        # Stop compose container
+        yaml_path = "db/compose.yaml"
+        await close_docker_compose(compose_path=yaml_path, down=False)
+    
+    async def close(self):
+        await self.async_cleanup()
+        await super().close()  # don't forget this!
+
+
+bot = MyBot(command_prefix="/", intents=discord.Intents.all())
+
+
+# Slash Commands and Deferred Replies
+# https://www.youtube.com/watch?v=JN5ya4mMkek
+GUILD_ID = discord.Object(id=discord_server_id)
+@bot.tree.command(name="chat", description="Chat with AI bot.", guild=GUILD_ID)
+async def chat(interaction: discord.Interaction, text: str):
+    await interaction.response.defer()
+    
+    #TODO: store slash command text in db
+
+    # TODO: Call llm/langgraph for response and conditional querying
+
+    # Create embedding
+    # Note: Some embedding models like 'intfloat/multilingual-e5-large-instruct' require instructions to be added to query. Documents don't need instructions.
+    #! Delete/edit query embedding instruction as needed.
+    task = "Given user's message query, retrieve relevant messages that answer the query."
+    # instruct_query = get_detailed_instruct(query=message.content,
+    #                                         task_description=task)
+    # # for querying
+    # instruct_embedding = create_embedding(model_name=embedding_model,
+    #                                       input=instruct_query)
+
+    #! DUMMY DATA
+    instruct_embedding = [-5.1, 2.9, 0.8, 7.9, 3.1] # fruit
+    #! DUMMY DATA
+
+    err_message = "Error getting results"
+    try:
+        #TODO: will change this logic later
+        short_result = await short_db.query_vector(query=instruct_embedding)
+        long_results = await long_db.query_vector(query=instruct_embedding)
+    except Exception as e:
+        results = err_message
+    
+    response = "Some llm response"
+    #TODO----
+    response = results
+
+    limit = 2000 # message char limit
+    if len(response) > limit:
+        tw = textwrap.TextWrapper(
+            width=limit,
+            break_long_words=True,
+            break_on_hyphens=True
+        )
+        
+        chunks = tw.wrap(response)
+        chunks_len = len(chunks)
+        for i,c in enumerate(chunks, 1):
+            await interaction.followup.send(f"Page {i}/{chunks_len}: {interaction.user.mention} {c}")
+    else:
+        await interaction.followup.send(f"{interaction.user.mention} {response}")
+
+
+# --------------------------
+# Run main()
+# --------------------------
 async def main():
-    # --------------------------
-    # Create database (+ postgres extensions) and table if not present
-    # --------------------------
-    #TODO: open up long_term db (for querying only)
-    # long-term db
-    long_db = AsyncPostgresDataBase(password=pg_password,
-                        user=pg_username,
-                        db_name=long_db_name,
-                        port=long_port,
-                        hide_parameters=True)
-
-    # short-term db
-    short_db = AsyncPostgresDataBase(password=pg_password,
-                        user=pg_username,
-                        db_name=short_db_name,
-                        port=short_port,
-                        hide_parameters=True)
-
-    await short_db.make_db()
     await short_db.enable_vectors()
 
     # create table(s)
     async with short_db.engine.begin() as conn:
         await conn.run_sync(CombinedBase.metadata.create_all) # prevents duplicate tables
-
-    # pk generation 
-    #! Change start_date, machine_id if necessary
-    start_time = datetime(2025,1,1,tzinfo=timezone.utc)
-    sf = SonyFlake(start_time=start_time, machine_id=lambda: 1)
 
     #! DUMMY DATA
     # https://weaviate.io/blog/vector-embeddings-explained
@@ -167,140 +302,23 @@ async def main():
                         "index_type": "StreamingDiskAnn", #* change accordingly
                         "index_measurement": "vector_cosine_ops", #* change accordingly
                     }
-            
+            #TODO: fix (didn't add)
             await short_db.add_record(table=TranscriptionsVectors, data=data)
-    except:
+    except Exception as e:
+        raise e
         pass
     #! DUMMY DATA
 
-    # --------------------------
-    # Store Discord messages as embeddings (+ csv files) and call llm with rag to answer user inputs
-    # --------------------------
-    GUILD_ID = discord.Object(id=discord_server_id)
-    class MyBot(commands.Bot):
-        async def on_ready(self):
-            print(f"Logged on as {bot.user}!")
+    try:
+        await bot.start(discord_token)
+    finally:
+        await bot.close()
+        sys.exit(0)
 
-            try:
-                synced = await self.tree.sync(guild=GUILD_ID)
-                print(f"Syned {len(synced)} commands to guild {GUILD_ID.id}.")
-            except Exception as e:
-                print(f"Error syncing commands: {e}")
-                raise
-
-        async def on_message(self, message):
-            # Note: If only images/videos/audio/gifs or any other attachments sent, text content will be empty.
-            # Note: If storing unstructured data, use multi-modal embedding model (and data lake).
-            if message.content != "":
-                # for storage
-                # embedding_vector = await create_embedding(model_name=embedding_model,
-                #                                     input=f"{message.created_at.strftime("%Y-%m-%d %H:%M:%S")}: {message.content}").tolist()
-
-                #! DUMMY DATA
-                embedding_vector = [-5.1, 2.9, 0.8, 7.9, 3.1] # fruit
-                #! DUMMY DATA
-
-                data = {
-                    # Transcriptions
-                    "trans_id": message.id, # snowflake id
-                    "timestamp": message.created_at,
-                    "timezone": "CT", #* change accordingly
-                    "speaker": str(message.author),
-                    "text": message.content,
-
-                    # Vectors
-                    "vec_id": sf.next_id(),
-                    "embedding_model": embedding_model,
-                    "embedding_dim": embedding_dim,
-                    "embedding": embedding_vector,
-                    "index_type": "StreamingDiskAnn", #* change accordingly
-                    "index_measurement": "vector_cosine_ops", #* change accordingly
-                }
-                
-                try:
-                    async with asyncio.TaskGroup() as tg:
-                        # add to db
-                        tg.create_task(short_db.add_record(table=TranscriptionsVectors,data=data))
-                        # save in all-data csv
-                        tg.create_task(write_to_csv(full_file_path=all_records_csv_path, 
-                                    data=data))     
-                except* Exception as eg:
-                    for e in eg.exceptions:
-                        print("Error:", e)
-                    # save in not-added csv
-                    await write_to_csv(full_file_path=not_added_csv_path, 
-                                data=data)
-
-        
-        # custom clean up when KeyboardInterrupted
-        # https://stackoverflow.com/questions/69682471/how-do-i-gracefully-handle-ctrl-c-and-shutdown-discord-py-bot
-        async def async_cleanup(self):
-            # Stop compose container
-            yaml_path = "db/compose.yaml"
-            await close_docker_compose(compose_path=yaml_path, down=False)
-        
-        async def close(self):
-            await self.async_cleanup()
-            await super().close()  # don't forget this!
-
-
-    bot = MyBot(command_prefix="/", intents=discord.Intents.all())
-
-
-    # Slash Commands and Deferred Replies
-    # https://www.youtube.com/watch?v=JN5ya4mMkek
-    GUILD_ID = discord.Object(id=discord_server_id)
-    @bot.tree.command(name="chat", description="Chat with AI bot.", guild=GUILD_ID)
-    async def chat(interaction: discord.Interaction, text: str):
-        await interaction.response.defer()
-        
-        # TODO: Call llm/langgraph for response and conditional querying
-
-        # Create embedding
-        # Note: Some embedding models like 'intfloat/multilingual-e5-large-instruct' require instructions to be added to query. Documents don't need instructions.
-        #! Delete/edit query embedding instruction as needed.
-        task = "Given user's message query, retrieve relevant messages that answer the query."
-        # instruct_query = get_detailed_instruct(query=message.content,
-        #                                         task_description=task)
-        # # for querying
-        # instruct_embedding = create_embedding(model_name=embedding_model,
-        #                                       input=instruct_query)
-
-        #! DUMMY DATA
-        instruct_embedding = [-5.1, 2.9, 0.8, 7.9, 3.1] # fruit
-        #! DUMMY DATA
-
-        err_message = "Error getting results"
-        try:
-            #TODO: will change this logic later
-            short_result = await short_db.query_vector(query=instruct_embedding)
-            long_results = await long_db.query_vector(query=instruct_embedding)
-        except Exception as e:
-            results = err_message
-        
-        response = "Some llm response"
-        #TODO----
-        response = results
-
-        limit = 2000 # message char limit
-        if len(response) > limit:
-            tw = textwrap.TextWrapper(
-                width=limit,
-                break_long_words=True,
-                break_on_hyphens=True
-            )
-            
-            chunks = tw.wrap(response)
-            chunks_len = len(chunks)
-            for i,c in enumerate(chunks, 1):
-                await interaction.followup.send(f"Page {i}/{chunks_len}: {interaction.user.mention} {c}")
-        else:
-            await interaction.followup.send(f"{interaction.user.mention} {response}")
-        
-
-    bot.run(discord_token)
-
+# try:
 asyncio.run(main())
+# except (asyncio.CancelledError, KeyboardInterrupt) as e:
+#     print("Shutting down...")
 
 #* Postgres -> csv and db backups: run 'backups.py'
 #* csv -> Postgres: run 'db_save.py'
