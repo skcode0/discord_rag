@@ -114,7 +114,7 @@ async def main():
         db.dump_postgres(backup_path=dump_full_path, 
                          database_name=short_db_name,
                          host="localhost",
-                         port=short_port,
+                         port=5432, 
                          username=pg_username,
                          F="c",
                          docker=True,

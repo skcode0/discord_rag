@@ -282,47 +282,65 @@ class AsyncPostgresDataBase:
                             compress: bool = True, compress_level: Optional[int] = None
                             ) -> None:
         """
-        Uses subprocess to dump postgres database.
+        Uses shell to dump postgres database.
         Note: Password will be asked.
+        Note: If using docker, you'll need docker compose (yaml)
 
         - backup_path: path for backup file output
         - database_name: name of database to back up
         - host: name of host
         - port: port number
         - username: PostgreSQL username
+        - docker: If database in docker container, indicate True.
+        - docker_service_name: If docker=True, indicate docker service name where database is located
+        - docker_yaml_location: If docker=True, indicate location of docker compose file.
         - F: format of backup. Defaults to (p)lain. Other formats will require pg_restore when restoring db.
         - blob: include large objects (BLOBs) or not
         - compress:  
         - compress_level: If compress = True, what level should the compress be (0-9)? When None, it will default to 6.
         
         """
-        cmd = ["pg_dump", "-h", host, "-p", str(port), "-U", username, "-F", F]
+        cmd = f"pg_dump -h {host} -p {str(port)} -U {username} -F {F}"
+
+        # cmd = ["pg_dump", "-h", host, "-p", str(port), "-U", username, "-F", F]
 
         if docker:
-            d = ["docker-compose"]
+            d = "docker-compose"
+            # d = ["docker-compose"]
 
             if docker_yaml_location or docker_yaml_location != "":
-                d += ["-f", docker_yaml_location]
-            
-            d += ["exec", "-T", docker_service_name]
+                d += f" -f {docker_yaml_location}"
+                # d += ["-f", docker_yaml_location]
 
-        cmd = d + cmd
+            d += f" exec -T {docker_service_name}"
+            # d += ["exec", "-T", docker_service_name]
+
+            cmd = d + " " + cmd
 
         if blob:
-            cmd.append("-b")
+            cmd += " -b"
+            # cmd.append("-b")
         
         if F.lower() in {"c", "d"}:
             if compress:
                 if compress_level is not None:
-                    cmd += ['-Z', str(compress_level)]
+                    cmd += f" -Z {str(compress_level)}"
+                    # cmd += ['-Z', str(compress_level)]
             else:
-                cmd += ['-Z', '0']
+                cmd += " -Z 0"
+                # cmd += ['-Z', '0']
 
-        cmd += ["-f", backup_path]
-        cmd.append(database_name)
-        print(*cmd)
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
+        # cmd += ["-f", backup_path]
+        # cmd.append(database_name)
+        # cmd += [">", backup_path]
+        # cmd_str = " ".join(cmd)
+
+        cmd += f" {database_name} > {backup_path}"
+
+        print(cmd)
+
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
             stdout=PIPE,
             stderr=PIPE,
         )
@@ -333,10 +351,6 @@ class AsyncPostgresDataBase:
             raise RuntimeError(f"pg_dump failed: {stderr.decode().strip()}")
         else:
              print(f"Backup completed successfully. Output saved to {backup_path}")
-
-    #TODO: dump pg in tmp -> copy to host dir
-    async def docker_dump_postgres():
-
 
 
 # --------------------------
