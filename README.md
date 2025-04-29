@@ -48,6 +48,16 @@
 - You may have noticed that some functions may be running asynchronously unnecessarily, or that they are not truly async -- as in, they are running on thread (ex. aiofile vs aiofiles). Yes, this adds overhead and can make the code run slower, but there's so many API calls and file I/O that I made the functions (NOT ALL) run in async.
 
 
+<h1>pgvectorscale</h1>
+
+- [pgvectorscale reference](https://github.com/timescale/pgvectorscale/blob/main/README.md#using-a-pre-built-docker-container)
+- [TimescaleDB reference](https://docs.timescale.com/self-hosted/latest/install/installation-docker/)
+
+- Run the TimescaleDB Docker image: `docker pull timescale/timescaledb-ha:pg17`
+- Docker Compose file (`compose.yaml`) inside `db` folder should create necessary databases. 
+- Double check to see if you have the TimescaleDB extensions (look at `TimescaleDB reference`). You can either run psql command `\dx` after connecting to database or look at `Extensions` tab of a database in pgAdmin 4.
+
+
 <h1> Discord Bot </h1>
 
 <h2> Create Discord Bot: </h2>

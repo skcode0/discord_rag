@@ -1,4 +1,4 @@
-from sqlalchemy import text, create_engine
+from sqlalchemy import text, create_engine, inspect
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy_utils import database_exists, create_database
 from sqlalchemy.exc import DBAPIError, ProgrammingError
@@ -54,7 +54,7 @@ class AsyncPostgresDataBase:
 
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
 
-    #TODO: fix
+
     def make_db(self) -> None:
         """
         If database doesn't exist, create one.
@@ -84,6 +84,28 @@ class AsyncPostgresDataBase:
             await session.commit()
         print("Vectorscale enabled.")
 
+    # TODO: get col info for all revelent tables
+    def get_table_desc(self, tablename: str) -> str:
+        """
+        Gets table description.
+
+        - tablename: table to get details from
+
+        Returns formatted string of table description.
+        """
+        # ref: https://huggingface.co/docs/smolagents/en/examples/text_to_sql
+        inspector = inspect(self.engine.sync_engine)
+
+        for table_name in inspector.get_table_names():
+            for column in inspector.get_columns(table_name):
+                print(f"Column: {column['name']}, {column['type']}" )
+
+        # columns_info = [(col["name"], col["type"]) for col in inspector.get_columns(tablename)]
+
+        # table_description = "Columns:\n" + "\n".join([f"  - {name}: {col_type}" for name, col_type in columns_info])
+
+        # return table_description
+        return "eh"
     
     async def add_record(self, table: Type[DeclarativeBase], data: Dict[str, Any]) -> None:
         """
@@ -102,13 +124,13 @@ class AsyncPostgresDataBase:
             err = format_db_error(e)
             raise RuntimeError(err)
 
-
+    #TODO: fix hard-coded stuff. Agent will be sending sql statements.
     async def query_vector(self, 
                      query: List[Union[int, float]],
                      join: bool = False,
-                     search_list_size: int=100,
-                     rescore: int=50,
-                     top_k: int=5) -> List[Dict]:
+                     search_list_size: int = 100,
+                     rescore: int = 50,
+                     top_k: int = 5) -> List[Dict]:
         """
         Uses streamingDiskAnn and cosine distance to get the most relevant query answers.
 
@@ -1134,6 +1156,30 @@ def create_embedding(model_name: str,
 # --------------------------
 # LLM Agents/Tools
 # --------------------------
+# def get_curr_time():
+
+
+# def convert_to_utc(time: Union[str, datetime]) -> datetime:
+#     """
+#     Converts time to UTC timezone.
+    
+#     Args:
+#         time: time that needs to be converted to UTC
+    
+#     Returns:
+#         Datetime with UTC timezone
+#     """
+
+#     if isinstance(time, str):
+#         time = 
+
+
+# def generate_sql_stm(model, prompt, query):
+#     """
+#     Generate
+
+    
+#     """
 
 
 

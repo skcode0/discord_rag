@@ -19,7 +19,6 @@ from tables import CombinedBase, TranscriptionsVectors
 from sonyflake import SonyFlake
 import asyncio
 import textwrap
-import pytz
 
 # --------------------------
 # start Docker Compose command for DBs (only short term)
@@ -117,6 +116,9 @@ long_db = AsyncPostgresDataBase(password=pg_password,
                     port=long_port,
                     hide_parameters=True)
 
+#TODO
+# long_table_desc = long_db.get_table_desc("")
+
 
 # short-term db
 short_db = AsyncPostgresDataBase(password=pg_password,
@@ -137,8 +139,6 @@ sf = SonyFlake(start_time=start_time, machine_id=lambda: 1)
 # --------------------------
 # Store Discord messages as embeddings (+ csv files) and call llm with rag to answer user inputs
 # --------------------------
-local_timezone = pytz.timezone('America/Chicago')
-
 GUILD_ID = discord.Object(id=discord_server_id)
 class MyBot(commands.Bot):
     async def on_ready(self):
@@ -156,8 +156,7 @@ class MyBot(commands.Bot):
         # Note: If storing unstructured data, use multi-modal embedding model (and data lake).
         if message.content != "":
             # for storage
-            # embedding_vector = await create_embedding(model_name=embedding_model,
-            #                                     input=f"{message.created_at.strftime("%Y-%m-%d %H:%M:%S")}: {message.content}").tolist()
+            # embedding_vector = await create_embedding(model_name=embedding_model, input={message.content").tolist()
 
             #! DUMMY DATA
             embedding_vector = [-5.1, 2.9, 0.8, 7.9, 3.1] # fruit
@@ -181,6 +180,7 @@ class MyBot(commands.Bot):
 
             try:
                 async with asyncio.TaskGroup() as tg:
+                    #TODO: create embedding
                     # add to db
                     tg.create_task(short_db.add_record(table=TranscriptionsVectors,data=data))
                     # save in all-data csv
