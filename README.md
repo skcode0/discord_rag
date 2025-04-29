@@ -36,7 +36,7 @@
 
 - Look at log files to see history.
 
-- `outdated` folder is incomplete synchronous code that shouldn't be used. Why keep it? ¯\_(ツ)_/¯
+- `outdated` folder is incomplete synchronous code that shouldn't be used. Why keep it?  ¯\\\_(ツ)_/¯
 
 - The program essentially creates 3 backups:
     1. csv while running main program
