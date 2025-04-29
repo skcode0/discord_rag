@@ -71,6 +71,7 @@ program_session = create_program_session_dir() # create session folder
 
 storage_path = './db/storage'
 
+#! Change names as needed
 # For rows that were not successfully added to db for some reason (ex. duplicates, inserting null in non-nullable column, etc.)
 not_added_file_name = "not_added.csv"
 # for recording all data

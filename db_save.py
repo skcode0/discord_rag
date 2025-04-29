@@ -50,7 +50,7 @@ logger.addHandler(handler)
 # Load csv to pandas, create db/tables if none exists
 # --------------------------
 #! Change to correct path name if necessary
-path = "./db/storage/output_2025-04-22_1.csv"
+path = "./db/sample.csv"
 
 #! Load in any relevant env variables as needed 
 load_dotenv(override=True)
