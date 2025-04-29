@@ -42,6 +42,7 @@
     1. csv while running main program
     2. csv backup from `backups.py`
     3. `.dump` from `backups.py`
+    <br>
     You can disable any of them to save space.
 
 - You may have noticed that some functions may be running asynchronously unnecessarily, or that they are not truly async -- as in, they are running on thread (ex. aiofile vs aiofiles). Yes, this adds overhead and can make the code run slower, but there's so many API calls and file I/O that I made the functions (NOT ALL) run in async.
