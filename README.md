@@ -2,7 +2,7 @@
 
 - A project to learn about RAG, vector DBs, ReAct agents, and LangGraph.
 
-- Discord messages are saved as vector embeddings and retrieved using StreamingDiskAnn. This is tested on PostgreSQL only.
+- Discord messages are saved as vector embeddings and retrieved using StreamingDiskAnn. Then LLM will use those results to reason and respond. This is tested on PostgreSQL only.
 
 
 <h2>3 main components:</h2>
