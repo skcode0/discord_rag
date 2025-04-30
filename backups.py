@@ -17,6 +17,9 @@ import asyncio
 
 #* This is for creating backup (postgres -> csv)
 
+# --------------------------
+# Load/set variables
+# --------------------------
 #! Change table/db name as needed
 tablename = "transcriptionsvectors"
 true_options = ["yes", "y"]
