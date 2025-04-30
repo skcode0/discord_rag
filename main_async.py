@@ -8,6 +8,7 @@ from utils_async import (
     get_detailed_instruct, 
     create_embedding,
     input_to_bool,
+    create_hypertable_ddl
     )
 from datetime import datetime, timezone
 import subprocess
@@ -296,6 +297,9 @@ async def chat(interaction: discord.Interaction, text: str):
     else:
         await interaction.followup.send(f"{interaction.user.mention} {response}")
 
+# create hypertable (time-based partitioning)
+#! Change chunk time interval if needed
+create_hypertable_ddl(table=TranscriptionsVectors, time_col="timestamp", chunk_interval="1 hour")
 
 # --------------------------
 # Run main()

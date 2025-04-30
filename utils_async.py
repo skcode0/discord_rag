@@ -1,9 +1,8 @@
-from sqlalchemy import text, create_engine, inspect
+from sqlalchemy import text, create_engine, inspect, event, DDL
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy_utils import database_exists, create_database
-from sqlalchemy.exc import DBAPIError, ProgrammingError
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-from sqlalchemy.engine.url import make_url
 from asyncio.subprocess import PIPE
 import asyncio
 import aiofiles
@@ -22,13 +21,42 @@ import pandas as pd
 import numpy as np
 from pandas.io.parsers import TextFileReader
 import logging
-import contextlib
 # from sentence_transformers import SentenceTransformer
 
 
 # --------------------------
 # SQLAlchemy
 # --------------------------
+def create_hypertable_ddl(table: type[DeclarativeBase], time_col: str, chunk_interval: Union[str, int]) -> None:
+    """
+    Creates hypertable (https://docs.timescale.com/use-timescale/latest/hypertables/).
+    Essentially partitions table into time-based chunks.
+    
+    - table: SQLAlchemy declarative model
+    - time_col: name of time column that will be used for chunking
+    - chunk_interval: define chunk time interval (ex. 24 hours, 3 days, 1 week, etc.) See this for format: https://docs.timescale.com/api/latest/hypertable/set_chunk_time_interval/
+
+    """
+    if isinstance(chunk_interval, str):
+        chunk_interval = f"INTERVAL '{chunk_interval}'"
+
+    sql = (
+        f"""
+        SELECT create_hypertable('{table.__tablename__}', '{time_col}',
+        chunk_time_interval => {chunk_interval}, 
+        if_not_exists => True);
+        """
+    )
+
+    event.listen(
+        table,
+        "after_create",
+        DDL(sql)
+    )
+    
+    print("Hypertable enabled.")
+    
+
 class AsyncPostgresDataBase:
     def __init__(self,
                  password: str,
