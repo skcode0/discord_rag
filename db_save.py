@@ -80,7 +80,7 @@ async def main():
 
     # create hypertable (time-based partitioning)
     #! Change chunk time interval if needed
-    create_hypertable_ddl(table=TranscriptionsVectors, time_col="timestamp", chunk_interval="1 year")
+    create_hypertable_ddl(table=TranscriptionsVectors, time_col="timestamp", chunk_interval="365 days")
 
     await db.enable_vectors()
 
