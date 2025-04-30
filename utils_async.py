@@ -282,8 +282,8 @@ class AsyncPostgresDataBase:
                     async def writer(data):
                         await f.write(data)
                     
-                    await pgconn.copy_from_table(
-                    table_name,
+                    await pgconn.copy_from_query(
+                    f"SELECT * FROM {table_name}",
                     output=writer,
                     format='csv',
                     header=True)
