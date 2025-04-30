@@ -12,7 +12,7 @@
 3. Long-term database: stores ALL messages. This database shouldn't change much.
 
 - `main_async.py` runs the main program: Discord, short-term memory (for storage and querying), long-term memory (for quering) and LLM.
-- `backups.py` is for backing up database. It will create .csv and .dump files. Recommended for short-term memory db where it will constantly need to refresh memories for each program session.
+- `backups.py` is for backing up databases. It will create .csv and .dump files. Recommended for short-term memory db where it will constantly need to refresh memories for each program session.
 - `db_save` is for loading up csv file into pandas, cleaning/processing data, and then sending that data to PostgreSQL. Recommended for sending short-term data to long-term db.
 
 
@@ -34,9 +34,11 @@
     1. Discord can timeout for bot responses that take too long. Although I don't think it's much of a problem, I just didn't want to deal with it.
     2. You are adding/deleting/modifying databases, so it's probably better to have more control inside separate .py files.
 
-- Look at log files to see history.
+- Look at log files to see history of transactions.
 
-- `outdated` folder is incomplete synchronous code that shouldn't be used. Why keep it?  ¯\\\_(ツ)_/¯
+- `outdated` folder is incomplete synchronous and old code that shouldn't be used. Why keep it?  ¯\\\_(ツ)_/¯
+
+- The database tables take advantage of Timescale's hypertables, which are ["PostgreSQL tables that automatically partition your time-series data by time and optionally by space"](https://docs.timescale.com/use-timescale/latest/hypertables/about-hypertables/). This is very useful when you want to have time-based retrieval for RAG ([More Info on YouTube](https://www.youtube.com/watch?v=EYMZVfKcRzM))
 
 - The program essentially creates 3 backups:
     1. csv while running main program
