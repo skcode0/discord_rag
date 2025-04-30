@@ -49,13 +49,13 @@ def create_hypertable_ddl(table: type[DeclarativeBase], time_col: str, chunk_int
     )
 
     event.listen(
-        table,
+        table.__table__,
         "after_create",
         DDL(sql)
     )
     
     print("Hypertable enabled.")
-    
+
 
 class AsyncPostgresDataBase:
     def __init__(self,

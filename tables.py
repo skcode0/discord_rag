@@ -18,7 +18,7 @@ class CombinedBase(DeclarativeBase):
 class TranscriptionsVectors(CombinedBase):
     __tablename__ = "transcriptionsvectors"
     trans_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
-    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True)) # timezone aware
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True, autoincrement=False) # timezone aware
     speaker: Mapped[str]
     text: Mapped[str]
 

@@ -9,7 +9,7 @@ from utils_async import (
 )
 from tables import CombinedBase, TranscriptionsVectors
 import pandas as pd
-from datetime import datetime, timezone
+from datetime import datetime
 from dotenv import load_dotenv
 import os
 import subprocess
@@ -107,6 +107,7 @@ async def main():
             db.pandas_to_postgres(
                 df=df,
                 table_name=table_names[0],
+                dtype = {"embedding": Vector(embedding_dim)}
             ),
         ]
 
@@ -141,10 +142,10 @@ async def main():
 
 
             tasks = [
-
                 db.pandas_to_postgres(
                     df=chunk,
                     table_name=table_names[0],
+                    dtype = {"embedding": Vector(embedding_dim)}
                 ),
             ]
 
