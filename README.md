@@ -40,6 +40,13 @@
 
 - The database tables take advantage of Timescale's hypertables, which are ["PostgreSQL tables that automatically partition your time-series data by time and optionally by space"](https://docs.timescale.com/use-timescale/latest/hypertables/about-hypertables/). This is very useful when you want to have time-based retrieval for RAG ([More Info on YouTube](https://www.youtube.com/watch?v=EYMZVfKcRzM))
 
+```sql
+-- After creating hypertables, you can see more detailed info with this code
+SELECT * 
+  FROM timescaledb_information.dimensions 
+  WHERE hypertable_name = 'transcriptionsvectors';
+```
+
 - The program essentially creates 3 backups:
     1. csv while running main program
     2. csv backup from `backups.py`
