@@ -43,8 +43,8 @@
 ```sql
 -- After creating hypertables, you can see more detailed info with this code
 SELECT * 
-  FROM timescaledb_information.dimensions 
-  WHERE hypertable_name = 'transcriptionsvectors';
+FROM timescaledb_information.dimensions 
+WHERE hypertable_name = 'transcriptionsvectors';
 ```
 
 - The program essentially creates 3 backups:
