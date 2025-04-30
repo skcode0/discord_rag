@@ -227,7 +227,7 @@ async def chat(interaction: discord.Interaction, text: str):
         # Transcriptions
         "trans_id": interaction.id, # snowflake id
         "timestamp": interaction.created_at, # UTC
-        "speaker": interaction.user,
+        "speaker": str(interaction.user),
         "text": text,
 
         # Vectors
@@ -272,15 +272,15 @@ async def chat(interaction: discord.Interaction, text: str):
 
     err_message = "Error getting results"
     try:
-        #TODO: will change this logic later
+        #TODO: will change this logic later (if at least 1 succeeds, don't raise error and work with it)
         short_result = await short_db.query_vector(query=instruct_embedding)
-        long_results = await long_db.query_vector(query=instruct_embedding)
+        # long_results = await long_db.query_vector(query=instruct_embedding)
     except Exception as e:
-        results = err_message
+        print(e)
+        response = err_message
     
     response = "Some llm response"
     #TODO----
-    response = results
 
     limit = 2000 # message char limit
     if len(response) > limit:
@@ -299,7 +299,7 @@ async def chat(interaction: discord.Interaction, text: str):
 
 # create hypertable (time-based partitioning)
 #! Change chunk time interval if needed
-create_hypertable_ddl(table=TranscriptionsVectors, time_col="timestamp", chunk_interval="1 hour")
+create_hypertable_ddl(table=TranscriptionsVectors, time_col="timestamp", chunk_interval="1 sec")
 
 # --------------------------
 # Run main()

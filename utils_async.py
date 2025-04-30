@@ -155,7 +155,6 @@ class AsyncPostgresDataBase:
     #TODO: fix hard-coded stuff. Agent will be sending sql statements.
     async def query_vector(self, 
                      query: List[Union[int, float]],
-                     join: bool = False,
                      search_list_size: int = 100,
                      rescore: int = 50,
                      top_k: int = 5) -> List[Dict]:
@@ -163,7 +162,6 @@ class AsyncPostgresDataBase:
         Uses streamingDiskAnn and cosine distance to get the most relevant query answers.
 
         - query: vectorized query input
-        - join: join 'vectors' and 'transcriptions' table or not
         - search_list_size: number of additional candidates considered during the graph search
         - rescore: re-evaluating the distances of candidate points to improve the precision of the results
         - top_k: get top k results
@@ -171,42 +169,22 @@ class AsyncPostgresDataBase:
 
         # <=> is cosine DISTANCE (1 - cosine similarity); lower the distance, the better
         # Note: pgvectorscale currently supports: cosine distance (<=>) queries, for indices created with vector_cosine_ops; L2 distance (<->) queries, for indices created with vector_l2_ops; and inner product (<#>) queries, for indices created with vector_ip_ops. This is the same syntax used by pgvector.
-        sql = ""
-        #! Change table name(s) as needed
-        if join:
-            sql = text("""
-                        WITH relaxed_results AS MATERIALIZED (
-                        SELECT 
-                            timestamp,
-                            speaker,
-                            text,
-                            embedding <=> :embedding AS distance
-                        FROM vectors v INNER JOIN transcriptions t
-                            ON v.transcription_id = t.id 
-                        ORDER BY distance
-                        LIMIT :limit)
-                    
-                        SELECT * 
-                        FROM relaxed_results 
-                        ORDER BY distance;
-                    """)            
-        else:
-            sql = text("""
-                        WITH relaxed_results AS MATERIALIZED (
-                        SELECT 
-                            timestamp,
-                            speaker,
-                            text,
-                            embedding <=> :embedding AS distance
-                        FROM transcriptionsvectors
-                        ORDER BY distance
-                        LIMIT :limit)
-                    
-                        SELECT * 
-                        FROM relaxed_results 
-                        ORDER BY distance;
-                    """)
-
+        sql = text("""
+                    WITH relaxed_results AS MATERIALIZED (
+                    SELECT 
+                        timestamp,
+                        speaker,
+                        text,
+                        embedding <=> :embedding AS distance
+                    FROM transcriptionsvectors
+                    ORDER BY distance
+                    LIMIT :limit)
+                
+                    SELECT * 
+                    FROM relaxed_results 
+                    ORDER BY distance;
+                """)            
+        
         params = {
             'embedding': str(query),  # seems like vector embedding needs to be passed in as string
             'limit': top_k
@@ -214,12 +192,12 @@ class AsyncPostgresDataBase:
 
         async with self.Session() as session:
             # https://github.com/timescale/pgvectorscale/blob/main/README.md?utm_source
-            await session.execute(text(
-            "SET diskann.query_search_list_size = :size; "
-            "SET diskann.query_rescore = :rescore"), {"size": search_list_size, "rescore": rescore})
+            await session.execute(text(f"SET diskann.query_search_list_size = {search_list_size}; "))
+
+            await session.execute(text(f"SET diskann.query_rescore = {rescore};"))
 
             result = await session.execute(sql, params)
-            rows = await result.fetchall()
+            rows = result.fetchall() # sync
             columns = result.keys()
         
         return [dict(zip(columns, row)) for row in rows]
