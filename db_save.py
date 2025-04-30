@@ -106,7 +106,7 @@ async def main():
         tasks = [
             db.pandas_to_postgres(
                 df=df,
-                table_name=table_name,
+                table_name=table_names[0],
             ),
         ]
 
@@ -144,7 +144,7 @@ async def main():
 
                 db.pandas_to_postgres(
                     df=chunk,
-                    table_name="transcriptions",
+                    table_name=table_names[0],
                 ),
             ]
 
