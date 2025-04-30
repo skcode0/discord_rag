@@ -328,42 +328,27 @@ class AsyncPostgresDataBase:
         """
         cmd = f"pg_dump -h {host} -p {str(port)} -U {username} -F {F}"
 
-        # cmd = ["pg_dump", "-h", host, "-p", str(port), "-U", username, "-F", F]
-
         if docker:
             d = "docker-compose"
-            # d = ["docker-compose"]
 
             if docker_yaml_location or docker_yaml_location != "":
                 d += f" -f {docker_yaml_location}"
-                # d += ["-f", docker_yaml_location]
 
             d += f" exec -T {docker_service_name}"
-            # d += ["exec", "-T", docker_service_name]
 
             cmd = d + " " + cmd
 
         if blob:
             cmd += " -b"
-            # cmd.append("-b")
         
         if F.lower() in {"c", "d"}:
             if compress:
                 if compress_level is not None:
                     cmd += f" -Z {str(compress_level)}"
-                    # cmd += ['-Z', str(compress_level)]
             else:
                 cmd += " -Z 0"
-                # cmd += ['-Z', '0']
-
-        # cmd += ["-f", backup_path]
-        # cmd.append(database_name)
-        # cmd += [">", backup_path]
-        # cmd_str = " ".join(cmd)
 
         cmd += f" {database_name} > {backup_path}"
-
-        print(cmd)
 
         proc = await asyncio.create_subprocess_shell(
             cmd,
