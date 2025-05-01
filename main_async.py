@@ -269,13 +269,13 @@ async def chat(interaction: discord.Interaction, text: str):
 
     # Create embedding
     # Note: Some embedding models like 'intfloat/multilingual-e5-large-instruct' require instructions to be added to query. Documents don't need instructions.
-    #! Delete/edit query embedding instruction as needed.
+    #! Deal with query embedding instruction as needed.
     task = "Given user's message query, retrieve relevant messages that answer the query."
-    # instruct_query = get_detailed_instruct(query=message.content,
-    #                                         task_description=task)
+    instruct_query = get_detailed_instruct(query=text,
+                                            task_description=task)
     # # for querying
-    # instruct_embedding = create_embedding(model_name=embedding_model,
-    #                                       input=instruct_query)
+    instruct_embedding = create_embedding(model_name=embedding_model,
+                                          input=instruct_query)
 
     #! DUMMY DATA
     instruct_embedding = [-5.1, 2.9, 0.8, 7.9, 3.1] # fruit
