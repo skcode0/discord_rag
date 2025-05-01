@@ -58,8 +58,8 @@ def create_hypertable_ddl(table: type[DeclarativeBase], time_col: str, chunk_int
     
     print("Hypertable enabled.")
 
-
-class AsyncPostgresDataBase:
+# user
+class AsyncPostgresDataBaseUser():
     def __init__(self,
                  password: str,
                  db_name: str,
@@ -83,37 +83,7 @@ class AsyncPostgresDataBase:
         self.engine = create_async_engine(self.url, pool_size=self.pool_size, echo=self.echo, hide_parameters=self.hide_parameters)
 
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
-
-
-    def make_db(self) -> None:
-        """
-        If database doesn't exist, create one.
-        Reference: Connect to PostgreSQL Using SQLAlchemy & Python (https://www.youtube.com/watch?v=neW9Y9xh4jc)
-
-        Returns postgres url
-        """
-        sync_url = f'postgresql+psycopg://{self.user}:{self.password}@{self.host}:{self.port}/{self.db_name}'
-
-        sync_engine = create_engine(sync_url)
-
-        if not database_exists(sync_url):
-            create_database(sync_url)
-            print(f"Database {self.db_name} has been sucessfully created.")
-        else:
-            print(f"The database with '{self.db_name}' name already exists.")
-
-        sync_engine.dispose()
-
-        
-    async def enable_vectors(self) -> None:
-        """
-        Adds pgvectorscale to db
-        """
-        async with self.Session() as session:
-            await session.execute(text("CREATE EXTENSION IF NOT EXISTS vectorscale CASCADE;")) # CASCADE will automatically install pgvector
-            await session.commit()
-        print("Vectorscale enabled.")
-
+    
     # TODO: get col info for all revelent tables
     def get_table_desc(self, tablename: str) -> str:
         """
@@ -136,23 +106,6 @@ class AsyncPostgresDataBase:
 
         # return table_description
         return "eh"
-    
-    async def add_record(self, table: Type[DeclarativeBase], data: Dict[str, Any]) -> None:
-        """
-        Add record. If record could not be added, it will raise error. 
-
-        - table: table to add record
-        - data: record data. If the data dict's keys don't have the same name as the table name or there's more keys than column names, it will raise error. If there are less keys than columns, then depending on whether the column is nullable or not, it will add null or raise (IntegrityError) error.
-        
-        """
-        try:
-            async with self.Session() as session: # auto-closes session
-                session.add(table(**data)) # has to be sync (?)
-                await session.commit()
-        except DBAPIError as e:
-            await session.rollback()
-            err = format_db_error(e)
-            raise RuntimeError(err)
 
     #TODO: fix hard-coded stuff. Agent will be sending sql statements.
     async def query_vector(self, 
@@ -202,7 +155,109 @@ class AsyncPostgresDataBase:
             rows = result.fetchall() # sync
             columns = result.keys()
         
-        return [dict(zip(columns, row)) for row in rows]
+        return [dict(zip(columns, row)) for row in rows]   
+
+# super user
+class AsyncPostgresDataBaseSuperUser(AsyncPostgresDataBaseUser):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def make_db(self) -> None:
+        """
+        If database doesn't exist, create one.
+        Reference: Connect to PostgreSQL Using SQLAlchemy & Python (https://www.youtube.com/watch?v=neW9Y9xh4jc)
+
+        Returns postgres url
+        """
+        sync_url = f'postgresql+psycopg://{self.user}:{self.password}@{self.host}:{self.port}/{self.db_name}'
+
+        sync_engine = create_engine(sync_url)
+
+        if not database_exists(sync_url):
+            create_database(sync_url)
+            print(f"Database {self.db_name} has been sucessfully created.")
+        else:
+            print(f"The database with '{self.db_name}' name already exists.")
+
+        sync_engine.dispose()
+
+        
+    async def enable_vectors(self) -> None:
+        """
+        Adds pgvectorscale to db
+        """
+        async with self.Session() as session:
+            await session.execute(text("CREATE EXTENSION IF NOT EXISTS vectorscale CASCADE;")) # CASCADE will automatically install pgvector
+            await session.commit()
+        print("Vectorscale enabled.")
+
+
+    async def create_readonly_group(self, db_name: Union[str, list[str]], group_name: str = "readonly") -> None:
+        """
+        Creates a read-only role. Method is private because it shouldn't be used by everyone.
+        
+        - group_name: name of db group of create
+        - db_name: name of db to give  
+
+        """
+        async with self.engine.begin() as conn:
+            # create group login
+            await conn.execute(text(f"CREATE ROLE {group_name} NOLOGIN NOINHERIT"))
+
+            # database access
+            if isinstance(db_name, list):
+                for db in db_name:
+                    await conn.execute(text(f"GRANT CONNECT ON DATABASE {db} TO {group_name}"))
+            else:
+                await conn.execute(text(f"GRANT CONNECT ON DATABASE  {db_name} TO {group_name}"))
+
+            # schema access
+            await conn.execute(text(f"GRANT USAGE ON SCHEMA public TO {group_name}"))
+
+            # table access
+            await conn.execute(text(f"GRANT SELECT ON ALL TABLES IN SCHEMA public TO {group_name}"))
+
+            # grant SELECT on future tables
+            await conn.execute(text(f"""
+            ALTER DEFAULT PRIVILEGES IN SCHEMA public
+               GRANT SELECT ON TABLES TO {group_name}
+            """))
+
+            print(f"Created db group: {group_name}.")
+
+    
+    async def add_user(self, role_name: str, group_name: str, password: str) -> None:
+        """
+        Creates user and assign to group.
+
+        - role_name: name of role to add to
+        - group_name: name of group a user needs to be added to
+        - password: password for created user
+
+        """
+        async with self.engine.begin() as conn:
+            await conn.execute(text(f"CREATE ROLE {role_name} LOGIN PASSWORD :pw"), {"pw": password})
+            await conn.execute(text(f"GRANT {group_name} TO {role_name}"))
+        
+        print(f"{role_name.capitalize()} added to {group_name}.")
+
+    
+    async def add_record(self, table: Type[DeclarativeBase], data: Dict[str, Any]) -> None:
+        """
+        Add record. If record could not be added, it will raise error. 
+
+        - table: table to add record
+        - data: record data. If the data dict's keys don't have the same name as the table name or there's more keys than column names, it will raise error. If there are less keys than columns, then depending on whether the column is nullable or not, it will add null or raise (IntegrityError) error.
+        
+        """
+        try:
+            async with self.Session() as session: # auto-closes session
+                session.add(table(**data)) # has to be sync (?)
+                await session.commit()
+        except DBAPIError as e:
+            await session.rollback()
+            err = format_db_error(e)
+            raise RuntimeError(err)
 
     
     async def delete_all_rows(self, tablename) -> None:
@@ -1045,7 +1100,7 @@ def format_db_error(e: DBAPIError) -> str:
 # --------------------------
 # Handling shutdown
 # --------------------------
-async def clean_table(db: AsyncPostgresDataBase, 
+async def clean_table(db: type[DeclarativeBase], 
                 tablename: str,
                 truncate: bool = True) -> None:
     """

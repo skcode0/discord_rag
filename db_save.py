@@ -1,5 +1,5 @@
 from utils_async import (
-    AsyncPostgresDataBase, 
+    AsyncPostgresDataBaseSuperUser, 
     csv_to_pd, 
     str_to_vec, 
     setLogger, 
@@ -70,7 +70,7 @@ async def main():
                 parse_dates=["timestamp"],
                 chunksize=chunksize)
 
-    db = AsyncPostgresDataBase(password=password,
+    db = AsyncPostgresDataBaseSuperUser(password=password,
                         db_name=db_name,
                         port=port,
                         echo=False,

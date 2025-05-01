@@ -56,6 +56,8 @@ WHERE hypertable_name = 'transcriptionsvectors';
 
 - You may have noticed that some functions may be running asynchronously unnecessarily, or that they are not truly async -- as in, they are running on thread (ex. aiofile vs aiofiles). Yes, this adds overhead and can make the code run slower, but there's so many API calls and file I/O that I made the functions (NOT ALL) run in async.
 
+- Server is created for each db (short-term and long-term). If you want, you can configure it to put all dbs in the same server.
+
 
 <h1>pgvectorscale</h1>
 

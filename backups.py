@@ -1,5 +1,5 @@
 from utils_async import (
-    AsyncPostgresDataBase, 
+    AsyncPostgresDataBaseSuperUser, 
     clean_table, 
     input_to_bool,
     is_valid_windows_name,
@@ -97,7 +97,7 @@ while True:
         break
 
 async def main():
-    db = AsyncPostgresDataBase(password=pg_password,
+    db = AsyncPostgresDataBaseSuperUser(password=pg_password,
                         db_name=short_db_name,
                         port=short_port,
                         hide_parameters=True)

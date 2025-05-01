@@ -1,6 +1,6 @@
 import os
 from utils_async import (
-    AsyncPostgresDataBase, 
+    AsyncPostgresDataBaseSuperUser, 
     create_program_session_dir, 
     name_and_write_to_csv,
     write_to_csv_async, 
@@ -111,7 +111,7 @@ all_records_csv_path = name_and_write_to_csv(file_path=storage_path,
 # Create database (+ postgres extensions) and table if not present
 # --------------------------
 # long-term db (for querying only)
-long_db = AsyncPostgresDataBase(password=pg_password,
+long_db = AsyncPostgresDataBaseSuperUser(password=pg_password,
                     user=pg_username,
                     db_name=long_db_name,
                     port=long_port,
@@ -122,7 +122,7 @@ long_db = AsyncPostgresDataBase(password=pg_password,
 
 
 # short-term db
-short_db = AsyncPostgresDataBase(password=pg_password,
+short_db = AsyncPostgresDataBaseSuperUser(password=pg_password,
                     user=pg_username,
                     db_name=short_db_name,
                     port=short_port,
