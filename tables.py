@@ -1,5 +1,5 @@
-from sqlalchemy import Index, ForeignKey, UniqueConstraint, BigInteger, DateTime
-from sqlalchemy.orm import DeclarativeBase, mapped_column, Mapped, relationship
+from sqlalchemy import Index, UniqueConstraint, BigInteger, DateTime
+from sqlalchemy.orm import DeclarativeBase, mapped_column, Mapped
 from datetime import datetime
 from pgvector.sqlalchemy import Vector
 from dotenv import load_dotenv
