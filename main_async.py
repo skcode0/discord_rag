@@ -157,10 +157,11 @@ class MyBot(commands.Bot):
         # Note: If storing unstructured data, use multi-modal embedding model (and data lake).
         if message.content != "":
             # for storage
-            # embedding_vector = await create_embedding(model_name=embedding_model, input={message.content").tolist()
+            embedding_vector = await create_embedding(model_name=embedding_model, input=message.content)
+            embedding_vector = await asyncio.to_thread(embedding_vector.tolist())
 
             #! DUMMY DATA
-            embedding_vector = [-5.1, 2.9, 0.8, 7.9, 3.1] # fruit
+            # embedding_vector = [-5.1, 2.9, 0.8, 7.9, 3.1] # fruit
             #! DUMMY DATA
 
             data = {
@@ -181,7 +182,6 @@ class MyBot(commands.Bot):
 
             try:
                 async with asyncio.TaskGroup() as tg:
-                    #TODO: create embedding
                     # add to db
                     tg.create_task(short_db.add_record(table=TranscriptionsVectors,data=data))
                     # save in all-data csv
@@ -213,14 +213,24 @@ bot = MyBot(command_prefix="/", intents=discord.Intents.all())
 # Slash Commands and Deferred Replies
 # https://www.youtube.com/watch?v=JN5ya4mMkek
 GUILD_ID = discord.Object(id=discord_server_id)
+
+@bot.tree.command(name="about", description="Info about the bot.", guild=GUILD_ID)
+async def chat(interaction: discord.Interaction):
+    await interaction.response.send_message("""
+    This bot can access databases to retrieve any relevant discord messages and respond accordingly. Note that the bot will ONLY save and know about the messages starting from it's first run and while running. So any messages sent before inviting and while not running the bot won't be considered.                     
+    """)
+
 @bot.tree.command(name="chat", description="Chat with AI bot.", guild=GUILD_ID)
 async def chat(interaction: discord.Interaction, text: str):
     await interaction.response.defer()
     
-    # Save user's slash command into db
-    #TODO: store slash command text in db
+    # Save user's slash command text into db
+    embedding_vector = await create_embedding(model_name=embedding_model, input=text)
+    embedding_vector = await asyncio.to_thread(embedding_vector.tolist())
+
+
     #! DUMMY DATA
-    embedding_vector = [-0.1, 4.3, 45.8, -37.94, 1.1]
+    # embedding_vector = [-0.1, 4.3, 45.8, -37.94, 1.1]
     #! DUMMY DATA
 
     data = {
@@ -241,6 +251,7 @@ async def chat(interaction: discord.Interaction, text: str):
 
     try:
         async with asyncio.TaskGroup() as tg:
+            # TODO: run langgraph/agents
             # add to db
             tg.create_task(short_db.add_record(table=TranscriptionsVectors,data=data))
             # save in all-data csv

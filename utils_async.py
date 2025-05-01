@@ -21,7 +21,9 @@ import pandas as pd
 import numpy as np
 from pandas.io.parsers import TextFileReader
 import logging
-# from sentence_transformers import SentenceTransformer
+from functools import lru_cache
+import torch
+from sentence_transformers import SentenceTransformer
 
 
 # --------------------------
@@ -1112,6 +1114,8 @@ def input_to_bool(question: str, true_options: Union[set, list], false_options: 
 # --------------------------
 # Embedding Model
 # --------------------------
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
 task = 'Given a user query, retrieve relevant information that answer the query.'
 def get_detailed_instruct(query: str,
                           task_description: str = task) -> str:
@@ -1125,21 +1129,28 @@ def get_detailed_instruct(query: str,
     """
     return f'Instruct: {task_description}\nQuery: {query}'
 
-#TODO: async
-def create_embedding(model_name: str, 
+
+@lru_cache(maxsize=None)
+def _get_model(model_name: str) -> SentenceTransformer:
+    """
+    Loads (and cache) the SentenceTransformer model.
+    """
+    return SentenceTransformer(model_name, device=device)
+
+
+async def create_embedding(model_name: str, 
                      input: str) -> np.ndarray:
     """
-        Creates vector embedding
-        
-        - model_name: name of embedding model
-        - input: input string that needs to be converted to embedding
+    Creates vector embedding
+    
+    - model_name: name of embedding model
+    - input: input string that needs to be converted to embedding
 
-        Returns NORMALIZED numpy array of vector embedding
+    Returns NORMALIZED numpy array of vector embedding
     """
-    #TODO: use lru cache? don't load this every time func is called 
-    model = SentenceTransformer(model_name)
+    model = _get_model(model_name)
 
-    embeddings = model.encode(input, convert_to_tensor=False, normalize_embeddings=True)
+    embeddings = await asyncio.to_thread(model.encode(input, convert_to_tensor=False, normalize_embeddings=True))
 
     return embeddings
 
