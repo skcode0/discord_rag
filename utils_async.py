@@ -85,9 +85,9 @@ class AsyncPostgresDataBaseUser():
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
     
     # TODO: get col info for all revelent tables
-    def get_table_desc(self, tablename: str) -> str:
+    def get_table_schema(self, tablename: str) -> str:
         """
-        Gets table description.
+        Gets table schema.
 
         - tablename: table to get details from
 
@@ -106,6 +106,7 @@ class AsyncPostgresDataBaseUser():
 
         # return table_description
         return "eh"
+    
 
     #TODO: fix hard-coded stuff. Agent will be sending sql statements.
     async def query_vector(self, 
@@ -196,8 +197,8 @@ class AsyncPostgresDataBaseSuperUser(AsyncPostgresDataBaseUser):
         """
         Creates a read-only role. Method is private because it shouldn't be used by everyone.
         
+        - db_name: name of db to give access to
         - group_name: name of db group of create
-        - db_name: name of db to give  
 
         """
         async with self.engine.begin() as conn:
@@ -1213,30 +1214,43 @@ async def create_embedding(model_name: str,
 # --------------------------
 # LLM Agents/Tools
 # --------------------------
-# def get_curr_time():
+top_k = 5
+vector_distance = "cosine distance (<=>)"
+query_prompt = f"""
+    You are an agent designed to interact with a PostgreSQL vector database with hypertable(s).
+    Given an input text and embedding, create a syntactically correct query to run. Make sure to use {vector_distance} for embedding. Unless the user specifies a specific number of examples they wish to obtain, always limit your query to at most {top_k} results.
 
+    Order the result based on vector distances. Never query for all the columns from a specific table, only ask for the relevant columns given the question.
 
-# def convert_to_utc(time: Union[str, datetime]) -> datetime:
-#     """
-#     Converts time to UTC timezone.
+    DO NOT make any DML statements (INSERT, UPDATE, DELETE, DROP etc.) to the database.
+    """
+
+#TODO: need to table schema
+async def text2sql(text: str, embedding: list) -> str:
+    """
+    Create a valid sql query.
+
+    Args:
+        text: text input to convert to sql
+        embedding: vector embedding to use for distance calculations
     
-#     Args:
-#         time: time that needs to be converted to UTC
+    Returns string of sql query.
+    """
+
+    system_message = {
+        "role": "system",
+        "content": query_prompt + "\n\n"
+    }
+
+
+async def query_db(db: Type[DeclarativeBase], sql_query: str) -> dict:
+    """
+    Queries database.
     
-#     Returns:
-#         Datetime with UTC timezone
-#     """
+    returns dict of rows
+    """
 
-#     if isinstance(time, str):
-#         time = 
-
-
-# def generate_sql_stm(model, prompt, query):
-#     """
-#     Generate
-
-    
-#     """
+    return await db.query_vector(sql_query)
 
 
 

@@ -6,9 +6,20 @@ from langgraph.graph.message import add_messages
 # https://langchain-ai.github.io/langgraph/tutorials/introduction/
 # https://langchain-ai.github.io/langgraph/how-tos/branching/
 
+#TODO: fix 
 class State(TypedDict):
-    short_term: Annotated[list, add_messages]
-    long_term: Annotated[list, add_messages]
+    input_text: str
+    input_embedding: list
+    query_results: Annotated[list, add_messages]
 
 graph_builder = StateGraph(State)
+
+# user input/query --> tools agent (get table schemas, run queries, keep running until no error) --> evaluate (answer good/not good) --> format/synthesize (clean up results) --> end
+
+
+    
+
+
+
+    
 

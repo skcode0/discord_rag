@@ -1,5 +1,6 @@
 import os
 from utils_async import (
+    AsyncPostgresDataBaseUser,
     AsyncPostgresDataBaseSuperUser, 
     create_program_session_dir, 
     name_and_write_to_csv,
@@ -45,6 +46,9 @@ short_db_name = os.environ.get('SHORT_TERM_DB')
 short_port = os.environ.get('SHORT_TERM_HOST_PORT')
 long_db_name = os.environ.get('LONG_TERM_DB')
 long_port = os.environ.get('LONG_TERM_HOST_PORT')
+# bot access
+bot_user = os.environ.get('POSTGRESS_BOT_USER')
+bot_password = os.environ.get('POSTGRES_BOT_PASSWORD')
 
 # discord
 discord_token = os.environ.get('DISCORD_TOKEN')
@@ -110,15 +114,16 @@ all_records_csv_path = name_and_write_to_csv(file_path=storage_path,
  # --------------------------
 # Create database (+ postgres extensions) and table if not present
 # --------------------------
-# long-term db (for querying only)
+# long-term db (only to give access to bot)
 long_db = AsyncPostgresDataBaseSuperUser(password=pg_password,
                     user=pg_username,
                     db_name=long_db_name,
                     port=long_port,
                     hide_parameters=True)
-
-#TODO
-# long_table_desc = long_db.get_table_desc("")
+# bot access for long-term
+group_name = "readonly"
+long_db.create_readonly_group(db_name=long_db_name, group_name=group_name)
+long_db.add_user(role_name=bot_user, group_name=group_name, password=bot_password)
 
 
 # short-term db
@@ -129,7 +134,22 @@ short_db = AsyncPostgresDataBaseSuperUser(password=pg_password,
                     hide_parameters=True)
 
 short_db.make_db()
+# bot access for short-term
+short_db.create_readonly_group(db_name=short_db_name, group_name=group_name)
+short_db.add_user(role_name=bot_user, group_name=group_name, password=bot_password)
 
+
+# bot
+bot_short = AsyncPostgresDataBaseUser(password=bot_password,
+                    user=bot_user,
+                    db_name=short_db_name,
+                    port=short_port,
+                    hide_parameters=True)
+bot_long = AsyncPostgresDataBaseUser(password=bot_password,
+                    user=bot_user,
+                    db_name=long_db_name,
+                    port=short_port,
+                    hide_parameters=True)
 
 # pk generation 
 #! Change start_date, machine_id if necessary
