@@ -78,38 +78,41 @@ class AsyncPostgresDataBaseUser():
         self.echo = echo
         self.hide_parameters = hide_parameters
 
-        self.url = f'postgresql+asyncpg://{self.user}:{self.password}@{self.host}:{self.port}/{self.db_name}'
+        self.uri = f'postgresql+asyncpg://{self.user}:{self.password}@{self.host}:{self.port}/{self.db_name}'
 
         self.engine = create_async_engine(self.url, pool_size=self.pool_size, echo=self.echo, hide_parameters=self.hide_parameters)
 
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
     
     # TODO: get col info for all revelent tables
-    def get_table_schema(self, tablename: str) -> str:
+    async def get_table_schema(self, tablename: str) -> str:
         """
         Gets table schema.
 
         - tablename: table to get details from
 
-        Returns formatted string of table description.
+        Returns list of column descriptions for a table.
         """
         # ref: https://huggingface.co/docs/smolagents/en/examples/text_to_sql
         inspector = inspect(self.engine.sync_engine)
 
-        for table_name in inspector.get_table_names():
-            for column in inspector.get_columns(table_name):
-                print(f"Column: {column['name']}, {column['type']}" )
+        info_str = f"{tablename}\n\n"
 
-        # columns_info = [(col["name"], col["type"]) for col in inspector.get_columns(tablename)]
+        async with self.engine.connect() as conn:
+            inspector = await conn.run_sync(inspect) # sync
 
-        # table_description = "Columns:\n" + "\n".join([f"  - {name}: {col_type}" for name, col_type in columns_info])
-
-        # return table_description
-        return "eh"
+            cols = inspector.get_columns(tablename, schema="public")
+            
+            for col in cols:
+                info_str += f"{col['name']}: type={col['type']}, nullable={col['nullable']}"
+                info_str += f", default={col['default']}" if col['default'] is not None else "" 
+                info_str += "\n"
+            
+            return info_str
     
 
-    #TODO: fix hard-coded stuff. Agent will be sending sql statements.
-    async def query_vector(self, 
+    #TODO: fix hard-coded stuff. so something about params other than query.
+    async def query(self, 
                      query: List[Union[int, float]],
                      search_list_size: int = 100,
                      rescore: int = 50,
@@ -122,37 +125,13 @@ class AsyncPostgresDataBaseUser():
         - rescore: re-evaluating the distances of candidate points to improve the precision of the results
         - top_k: get top k results
         """  
-
-        # <=> is cosine DISTANCE (1 - cosine similarity); lower the distance, the better
-        # Note: pgvectorscale currently supports: cosine distance (<=>) queries, for indices created with vector_cosine_ops; L2 distance (<->) queries, for indices created with vector_l2_ops; and inner product (<#>) queries, for indices created with vector_ip_ops. This is the same syntax used by pgvector.
-        sql = text("""
-                    WITH relaxed_results AS MATERIALIZED (
-                    SELECT 
-                        timestamp,
-                        speaker,
-                        text,
-                        embedding <=> :embedding AS distance
-                    FROM transcriptionsvectors
-                    ORDER BY distance
-                    LIMIT :limit)
-                
-                    SELECT * 
-                    FROM relaxed_results 
-                    ORDER BY distance;
-                """)            
-        
-        params = {
-            'embedding': str(query),  # seems like vector embedding needs to be passed in as string
-            'limit': top_k
-        }
-
         async with self.Session() as session:
             # https://github.com/timescale/pgvectorscale/blob/main/README.md?utm_source
             await session.execute(text(f"SET diskann.query_search_list_size = {search_list_size}; "))
 
             await session.execute(text(f"SET diskann.query_rescore = {rescore};"))
 
-            result = await session.execute(sql, params)
+            result = await session.execute(query)
             rows = result.fetchall() # sync
             columns = result.keys()
         

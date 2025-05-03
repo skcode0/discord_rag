@@ -304,8 +304,8 @@ async def chat(interaction: discord.Interaction, text: str):
     err_message = "Error getting results"
     try:
         #TODO: will change this logic later (if at least 1 succeeds, don't raise error and work with it)
-        short_result = await short_db.query_vector(query=instruct_embedding)
-        # long_results = await long_db.query_vector(query=instruct_embedding)
+        short_result = await bot_short.query_vector(query=instruct_embedding)
+        # long_results = await bot_long.query_vector(query=instruct_embedding)
     except Exception as e:
         print(e)
         response = err_message
