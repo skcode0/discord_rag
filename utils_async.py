@@ -1,4 +1,4 @@
-from sqlalchemy import text, create_engine, inspect, event, DDL
+from sqlalchemy import text, create_engine, inspect, event, DDL, MetaData
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy_utils import database_exists, create_database
 from sqlalchemy.exc import DBAPIError
@@ -83,6 +83,8 @@ class AsyncPostgresDataBaseUser():
         self.engine = create_async_engine(self.url, pool_size=self.pool_size, echo=self.echo, hide_parameters=self.hide_parameters)
 
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+
+        self.schemas = None
     
     # TODO: get col info for all revelent tables
     async def get_table_schema(self, tablename: str) -> str:
@@ -91,7 +93,7 @@ class AsyncPostgresDataBaseUser():
 
         - tablename: table to get details from
 
-        Returns list of column descriptions for a table.
+        Returns string of table schema.
         """
         # ref: https://huggingface.co/docs/smolagents/en/examples/text_to_sql
         inspector = inspect(self.engine.sync_engine)
@@ -108,10 +110,61 @@ class AsyncPostgresDataBaseUser():
                 info_str += f", default={col['default']}" if col['default'] is not None else "" 
                 info_str += "\n"
             
+            self.schemas = info_str
             return info_str
     
+    async def get_all_schemas(self) -> list:
+        """
+        Gets all table schemas
 
-    #TODO: fix hard-coded stuff. so something about params other than query.
+        Returns list of tables metadata (json format)  
+        """
+        metadata = MetaData()
+        async with self.engine.connect() as conn:
+            await conn.run_sync(metadata.reflect)
+        
+        async with self.engine.connect() as conn:
+            insp = await conn.run_sync(inspect)
+
+            tables = []
+            for tbl_name, table in metadata.tables.items():
+                # columns
+                cols = []
+                for col in table.columns:
+                    col_info = {
+                        "name": col.name,
+                        "type": str(col.type),
+                        "primary_key": col.primary_key,
+                        "nullable": col.nullable
+                    }
+                    if col.unique:
+                        col_info["unique"] = True
+                    if col.comment:
+                        col_info["comment"] = col.comment
+                    cols.append(col_info)
+
+            # foreign keys
+            fks = []
+            for fk in insp.get_foreign_keys(tbl_name):
+                fks.append({
+                    "column": fk["constrained_columns"][0],
+                    "references": {
+                        "table": fk["referred_table"],
+                        "column": fk["referred_columns"][0]
+                    }
+                })
+            
+            tables.append({
+                "table_name": tbl_name,
+                "columns": cols,
+                "foreign_keys": fks,
+            })
+
+            self.schemas = tables
+            return tables
+    
+
+    #TODO: do something about params other than query.
     async def query(self, 
                      query: List[Union[int, float]],
                      search_list_size: int = 100,

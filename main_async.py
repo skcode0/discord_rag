@@ -304,6 +304,14 @@ async def chat(interaction: discord.Interaction, text: str):
     err_message = "Error getting results"
     try:
         #TODO: will change this logic later (if at least 1 succeeds, don't raise error and work with it)
+        result = graph_builder.invoke({
+            "user_input": text,
+            "embedding": instruct_embedding,
+            "dbs": {
+                "short_term_db": bot_short,
+                "long_term_db": bot_long
+            }
+        })
         short_result = await bot_short.query_vector(query=instruct_embedding)
         # long_results = await bot_long.query_vector(query=instruct_embedding)
     except Exception as e:

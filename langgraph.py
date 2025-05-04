@@ -6,12 +6,27 @@ from langgraph.graph.message import add_messages
 # https://langchain-ai.github.io/langgraph/tutorials/introduction/
 # https://langchain-ai.github.io/langgraph/how-tos/branching/
 
-#TODO: add child state for max db tries and retry cnts
+llm = ""
+
+#TODO:
+def merge_dict(old: dict, new: dict) -> dict:
+    """
+    Merge old and new dict
+
+    - old: old dict
+    - new: new dict
+
+    Returns merged dict
+    """
+    return {**old, **new}
+
 
 #TODO: add state to tools 
 class State(TypedDict):
-    db_access = []
-    table_schema = []
+    user_input: str
+    embedding: list
+    tools_needed: set
+    dbs: Annotated[dict, merge_dict]
     query_results: Annotated[list, add_messages]
 
 graph_builder = StateGraph(State)
@@ -23,28 +38,44 @@ graph_builder = StateGraph(State)
 # --------------------------
 # For DB querying
 # --------------------------
+#! Change tool list as needed
+available_tools = {"short_term_db", "long_term_db"}
+def tool_decider(state: State):
+    f"""
+    Decides which tool(s) to use based on user input.
 
-def tool_decider():
-    pass
+    Available tools are: {available_tools}
 
+    """
+    system_prompt = {
+        "role": "system",
+        "content": "Choose the best tool(s) for asnwer user input. Do not response with anything else other than the tools needed. List them as a python set. ex. {tool1, tool2, ...}"
+    }
+    user_prompt = {
+        "role": "user",
+        "content": state.user_input
+    }
+
+    response = llm.invoke([system_prompt, user_prompt])
+    
+    return {"tools_needed": set(response)}
 
 
 # --------------------------
 # For DB querying
 # --------------------------
 
-def fetch_table_schema(db: Type(DeclarativeBase), table_name) -> str:
+def fetch_schema(state: State) -> Optional[dict]:
     """
-    Gets table schema from database.
-
-    Args:
-        db: class that contains database info
-        table_name: table name to get schema from
+    Gets schema from database.
 
     Returns string of table schema
     """
-    return db.get_table_schema(tablename = table_name)
-
+    for tool in state.tools_needed:
+        if tool in state.dbs:
+            db = state.dbs[tool]
+            if not db.schemas:
+                db.schemas = db.get_table_schema()
 
 
 top_k = 5
@@ -80,23 +111,51 @@ sql_system_prompt_2 = f"""To start you should ALWAYS look at the schema to see w
         FROM relaxed_results 
         ORDER BY distance;
     """
-def text2sql(text: str, schema: str) -> str:
+
+def fan_out_sql_generation(state: State) -> list[Send]:
+    return [
+        Send(
+            "generate_sql_and_query", 
+            {"db": db, "user_input": state.user_input, "embedding": state.embedding}
+    ) for db in state["tools_needed"] if state["tools_needed"] in state["dbs"]]
+
+
+
+def generate_sql_and_query(params) -> Union[dict, str]:
     """
     Converts text to SQL.
 
     Args:
-        text: input text that needs to be converted to SQL
-        db: class that contains database info
-        table_name: table schema to use for reference when creating SQL
+
 
     Returns sql in string format
     """
-    sys_prompt = sql_system_prompt_1 + schema + "\n" + sql_system_prompt_1
+    db = params["db"]
+    user_input = params["user_input"]
+    embedding = params["embedding"]
+
+    system_prompt = {
+        "role": "system",
+        "content": sql_system_prompt_1 + db.schemas + "\n" + sql_system_prompt_1
+    }
+
+    user_prompt = {
+        "role": "user",
+        "content": user_input
+    }
+
+    # text2query
+    sql = llm.invoke([system_prompt, user_prompt])
+
+    # validate
+    isValid = validate_query(sql)
+
+    if isValid:
+        results = run_query(db, sql)
+    
+    return {"query_results": results}
 
 
-
-
-# TODO: system prompt
 validate_system_prompt = """You are a SQL expert with a strong attention to detail.
     Double check the query for common mistakes, including:
     - Using NOT IN with NULL values
@@ -111,13 +170,29 @@ validate_system_prompt = """You are a SQL expert with a strong attention to deta
     If there are any of the above mistakes, rewrite the query. If there are no mistakes, just reproduce the original query.
 
     You will call the appropriate tool to execute the query after running this check.
-    """
-def validate_query():
-    """
-    Double check to see 
-    
-    """
 
+    Return True if everything is good, else False.
+    """
+def validate_query(query) -> bool:
+    """
+    Double check to see the SQL query is valid.
+    
+    Args:
+        query: SQL query to check.
+
+    Returns True if valid, False otherwise.
+    """
+    system_prompt = {
+        "role": "system",
+        "content": validate_system_prompt 
+    }
+
+    user_prompt = {
+        "role": "user",
+        "content": query
+    }
+
+    return bool(llm.invoke([system_prompt, user_prompt]))
 
 
 async def run_query(db: Type(DeclarativeBase), sql: str) -> list[dict]:
@@ -138,12 +213,22 @@ async def run_query(db: Type(DeclarativeBase), sql: str) -> list[dict]:
 # --------------------------
 
 #TODO: if not good, loop back and rerun
-def evaluate_results():
+def evaluate_results(state: State):
     """
     Evaluates sql query results and see if the results answer the user input text.
     
     """
-    pass
+    system_prompt = {
+        "role": "system",
+        #TODO
+        "content": "Your job is to evaluate if the query results answer user's input. If good, return True, else, return False."
+    }
+    user_prompt = {
+        "role": "user",
+        "content": 
+    }
+
+    
 
 #TODO: format result (list messages, generate response)
 def format_result():
