@@ -49,7 +49,7 @@ def tool_decider(state: State):
         "content": f"""Choose the best tool(s) for asnwer user input.
         Available tools are:
         {available_tools}
-        "Do not response with anything else other than the tools needed. List them as a python set. ex. {tool1, tool2, ...}"""
+        "Do not response with anything else other than the tools needed. List them as a python set."""
     }
     user_prompt = {
         "role": "user",
