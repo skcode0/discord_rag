@@ -132,6 +132,17 @@ short_db = AsyncPostgresDataBaseSuperUser(password=pg_password,
 
 short_db.make_db()
 
+# bot
+bot_short = AsyncPostgresDataBaseUser(password=bot_password,
+                    user=bot_user,
+                    db_name=short_db_name,
+                    port=short_port,
+                    hide_parameters=True)
+bot_long = AsyncPostgresDataBaseUser(password=bot_password,
+                    user=bot_user,
+                    db_name=long_db_name,
+                    port=short_port,
+                    hide_parameters=True)
 
 # pk generation 
 #! Change start_date, machine_id if necessary
@@ -334,17 +345,6 @@ async def main():
     short_db.create_readonly_group(db_name=short_db_name, group_name=group_name)
     short_db.add_user(role_name=bot_user, group_name=group_name, password=bot_password)
 
-    # bot
-    bot_short = AsyncPostgresDataBaseUser(password=bot_password,
-                        user=bot_user,
-                        db_name=short_db_name,
-                        port=short_port,
-                        hide_parameters=True)
-    bot_long = AsyncPostgresDataBaseUser(password=bot_password,
-                        user=bot_user,
-                        db_name=long_db_name,
-                        port=short_port,
-                        hide_parameters=True)
 
     # create table(s)
     async with short_db.engine.begin() as conn:
