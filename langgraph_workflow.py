@@ -46,6 +46,7 @@ class State(TypedDict):
     tools_needed: set
     dbs: Annotated[dict, merge_dict]
     query_results: Annotated[list, add_messages]
+    messages: Annotated[list, add_messages]
 
 # user input/query --> tools agent (get table schemas, run queries, keep running until no error) --> evaluate (answer good/not good) --> format/synthesize (clean up results) --> end
 
@@ -75,6 +76,8 @@ def tool_decider(state: State):
     }
 
     response = llm.invoke([system_prompt, user_prompt])
+
+    print(response)
     
     return {"tools_needed": set(response)}
 
@@ -94,6 +97,9 @@ def fetch_schema(state: State) -> Optional[dict]:
             db = state.dbs[tool]
             if not db.schemas:
                 db.schemas = db.get_table_schema()
+
+    for db in state.dbs:
+        print(db.schemas)
 
 
 # top_k = 5

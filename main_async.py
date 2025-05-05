@@ -21,7 +21,7 @@ from tables import CombinedBase, TranscriptionsVectors
 from sonyflake import SonyFlake
 import asyncio
 import textwrap
-from langgraph_workflow import app
+# from langgraph_workflow import app
 
 # --------------------------
 # start Docker Compose command for DBs (only short term)
@@ -295,21 +295,24 @@ async def chat(interaction: discord.Interaction, text: str):
     err_message = "Error getting results"
     try:
         #TODO: will change this logic later (if at least 1 succeeds, don't raise error and work with it)
-        response = app.invoke({
-            "user_input": text,
-            "embedding": instruct_embedding,
-            "dbs": {
-                "short_term_db": bot_short,
-                "long_term_db": bot_long
-            }
-        })
+        # response = app.invoke({
+        #     "user_input": text,
+        #     "embedding": instruct_embedding,
+        #     "dbs": {
+        #         "short_term_db": bot_short,
+        #         "long_term_db": bot_long
+        #     }
+        # })
+
+        # print(response)
+        response = "Some llm response"
+
         # short_result = await bot_short.query_vector(query=instruct_embedding)
         # long_results = await bot_long.query_vector(query=instruct_embedding)
     except Exception as e:
         print(e)
         response = err_message
     
-    # response = "Some llm response"
     #TODO----
 
     limit = 2000 # message char limit
@@ -339,11 +342,11 @@ async def main():
 
     # bot access for long-term
     group_name = "readonly"
-    long_db.create_readonly_group(db_name=long_db_name, group_name=group_name)
-    long_db.add_user(role_name=bot_user, group_name=group_name, password=bot_password)
+    await long_db.create_readonly_group(db_name=long_db_name, group_name=group_name)
+    await long_db.add_user(role_name=bot_user, group_name=group_name, password=bot_password)
     # bot access for short-term
-    short_db.create_readonly_group(db_name=short_db_name, group_name=group_name)
-    short_db.add_user(role_name=bot_user, group_name=group_name, password=bot_password)
+    await short_db.create_readonly_group(db_name=short_db_name, group_name=group_name)
+    await short_db.add_user(role_name=bot_user, group_name=group_name, password=bot_password)
 
 
     # create table(s)
@@ -351,41 +354,41 @@ async def main():
         await conn.run_sync(CombinedBase.metadata.create_all) # prevents duplicate tables
 
     #! DUMMY DATA
-    # https://weaviate.io/blog/vector-embeddings-explained
-    emb = [
-            ["cat", [1.5, -0.4, 7.2, 19.6, 20.2]],
-            ["dog", [1.7, -0.3, 6.9, 19.1, 21.1]],
-            ["apple", [-5.2, 3.1, 0.2, 8.1, 3.5]],
-            ["strawberry", [-4.9, 3.6, 0.9, 7.8, 3.6]],
-            ["building",[60.1, -60.3, 10, -12.3, 9.2]],
-            ["car",[81.6, -72.1, 16, -20.2, 102]]
-    ]
+    # # https://weaviate.io/blog/vector-embeddings-explained
+    # emb = [
+    #         ["cat", [1.5, -0.4, 7.2, 19.6, 20.2]],
+    #         ["dog", [1.7, -0.3, 6.9, 19.1, 21.1]],
+    #         ["apple", [-5.2, 3.1, 0.2, 8.1, 3.5]],
+    #         ["strawberry", [-4.9, 3.6, 0.9, 7.8, 3.6]],
+    #         ["building",[60.1, -60.3, 10, -12.3, 9.2]],
+    #         ["car",[81.6, -72.1, 16, -20.2, 102]]
+    # ]
 
-    snowflake_id = [7320991239237537792, 7320991239237537793, 7320991239237537794, 7320991239237537795, 7320991239237537796, 7320991239237537797]
+    # snowflake_id = [7320991239237537792, 7320991239237537793, 7320991239237537794, 7320991239237537795, 7320991239237537796, 7320991239237537797]
 
-    try:
-        for i in range(len(emb)):
-            data = {
-                        # Transcriptions
-                        "trans_id": snowflake_id[i],
-                        "timestamp": datetime.now(timezone.utc),
-                        "speaker": f"user_{i}",
-                        "text": emb[i][0],
+    # try:
+    #     for i in range(len(emb)):
+    #         data = {
+    #                     # Transcriptions
+    #                     "trans_id": snowflake_id[i],
+    #                     "timestamp": datetime.now(timezone.utc),
+    #                     "speaker": f"user_{i}",
+    #                     "text": emb[i][0],
 
-                        # Vectors
-                        "vec_id": sf.next_id(),
-                        "embedding_model": embedding_model,
-                        "embedding_dim": embedding_dim,
-                        "embedding": emb[i][1],
-                        "index_type": "StreamingDiskAnn", #* change accordingly
-                        "index_measurement": "vector_cosine_ops", #* change accordingly
-                    }
+    #                     # Vectors
+    #                     "vec_id": sf.next_id(),
+    #                     "embedding_model": embedding_model,
+    #                     "embedding_dim": embedding_dim,
+    #                     "embedding": emb[i][1],
+    #                     "index_type": "StreamingDiskAnn", #* change accordingly
+    #                     "index_measurement": "vector_cosine_ops", #* change accordingly
+    #                 }
 
-            await short_db.add_record(table=TranscriptionsVectors, data=data)
-    except Exception as e:
-        # raise e
-        pass
-    #! DUMMY DATA
+    #         await short_db.add_record(table=TranscriptionsVectors, data=data)
+    # except Exception as e:
+    #     # raise e
+    #     pass
+    # #! DUMMY DATA
 
     try:
         await bot.start(discord_token)
