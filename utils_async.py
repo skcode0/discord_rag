@@ -80,7 +80,7 @@ class AsyncPostgresDataBaseUser():
 
         self.uri = f'postgresql+asyncpg://{self.user}:{self.password}@{self.host}:{self.port}/{self.db_name}'
 
-        self.engine = create_async_engine(self.url, pool_size=self.pool_size, echo=self.echo, hide_parameters=self.hide_parameters)
+        self.engine = create_async_engine(self.uri, pool_size=self.pool_size, echo=self.echo, hide_parameters=self.hide_parameters)
 
         self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
 

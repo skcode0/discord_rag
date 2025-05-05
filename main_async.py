@@ -21,6 +21,7 @@ from tables import CombinedBase, TranscriptionsVectors
 from sonyflake import SonyFlake
 import asyncio
 import textwrap
+from langgraph_workflow import app
 
 # --------------------------
 # start Docker Compose command for DBs (only short term)
@@ -120,10 +121,6 @@ long_db = AsyncPostgresDataBaseSuperUser(password=pg_password,
                     db_name=long_db_name,
                     port=long_port,
                     hide_parameters=True)
-# bot access for long-term
-group_name = "readonly"
-long_db.create_readonly_group(db_name=long_db_name, group_name=group_name)
-long_db.add_user(role_name=bot_user, group_name=group_name, password=bot_password)
 
 
 # short-term db
@@ -134,22 +131,7 @@ short_db = AsyncPostgresDataBaseSuperUser(password=pg_password,
                     hide_parameters=True)
 
 short_db.make_db()
-# bot access for short-term
-short_db.create_readonly_group(db_name=short_db_name, group_name=group_name)
-short_db.add_user(role_name=bot_user, group_name=group_name, password=bot_password)
 
-
-# bot
-bot_short = AsyncPostgresDataBaseUser(password=bot_password,
-                    user=bot_user,
-                    db_name=short_db_name,
-                    port=short_port,
-                    hide_parameters=True)
-bot_long = AsyncPostgresDataBaseUser(password=bot_password,
-                    user=bot_user,
-                    db_name=long_db_name,
-                    port=short_port,
-                    hide_parameters=True)
 
 # pk generation 
 #! Change start_date, machine_id if necessary
@@ -284,8 +266,6 @@ async def chat(interaction: discord.Interaction, text: str):
         await write_to_csv_async(full_file_path=not_added_csv_path, 
                     data=data)
 
-    # Save bot response
-    # TODO: Call llm/langgraph for response and conditional querying
 
     # Create embedding
     # Note: Some embedding models like 'intfloat/multilingual-e5-large-instruct' require instructions to be added to query. Documents don't need instructions.
@@ -298,13 +278,13 @@ async def chat(interaction: discord.Interaction, text: str):
                                           input=instruct_query)
 
     #! DUMMY DATA
-    instruct_embedding = [-5.1, 2.9, 0.8, 7.9, 3.1] # fruit
+    # instruct_embedding = [-5.1, 2.9, 0.8, 7.9, 3.1] # fruit
     #! DUMMY DATA
 
     err_message = "Error getting results"
     try:
         #TODO: will change this logic later (if at least 1 succeeds, don't raise error and work with it)
-        result = app.invoke({
+        response = app.invoke({
             "user_input": text,
             "embedding": instruct_embedding,
             "dbs": {
@@ -312,13 +292,13 @@ async def chat(interaction: discord.Interaction, text: str):
                 "long_term_db": bot_long
             }
         })
-        short_result = await bot_short.query_vector(query=instruct_embedding)
+        # short_result = await bot_short.query_vector(query=instruct_embedding)
         # long_results = await bot_long.query_vector(query=instruct_embedding)
     except Exception as e:
         print(e)
         response = err_message
     
-    response = "Some llm response"
+    # response = "Some llm response"
     #TODO----
 
     limit = 2000 # message char limit
@@ -345,6 +325,26 @@ create_hypertable_ddl(table=TranscriptionsVectors, time_col="timestamp", chunk_i
 # --------------------------
 async def main():
     await short_db.enable_vectors()
+
+    # bot access for long-term
+    group_name = "readonly"
+    long_db.create_readonly_group(db_name=long_db_name, group_name=group_name)
+    long_db.add_user(role_name=bot_user, group_name=group_name, password=bot_password)
+    # bot access for short-term
+    short_db.create_readonly_group(db_name=short_db_name, group_name=group_name)
+    short_db.add_user(role_name=bot_user, group_name=group_name, password=bot_password)
+
+    # bot
+    bot_short = AsyncPostgresDataBaseUser(password=bot_password,
+                        user=bot_user,
+                        db_name=short_db_name,
+                        port=short_port,
+                        hide_parameters=True)
+    bot_long = AsyncPostgresDataBaseUser(password=bot_password,
+                        user=bot_user,
+                        db_name=long_db_name,
+                        port=short_port,
+                        hide_parameters=True)
 
     # create table(s)
     async with short_db.engine.begin() as conn:
