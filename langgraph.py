@@ -29,8 +29,6 @@ class State(TypedDict):
     dbs: Annotated[dict, merge_dict]
     query_results: Annotated[list, add_messages]
 
-graph_builder = StateGraph(State)
-
 # user input/query --> tools agent (get table schemas, run queries, keep running until no error) --> evaluate (answer good/not good) --> format/synthesize (clean up results) --> end
 
 
@@ -39,17 +37,19 @@ graph_builder = StateGraph(State)
 # For DB querying
 # --------------------------
 #! Change tool list as needed
-available_tools = {"short_term_db", "long_term_db"}
+available_tools = {"short_term_db": "Database that stores anything said on the same day as today.", 
+                   "long_term_db": "Database that stores anything said in the past."}
 def tool_decider(state: State):
     f"""
     Decides which tool(s) to use based on user input.
 
-    Available tools are: {available_tools}
-
     """
     system_prompt = {
         "role": "system",
-        "content": "Choose the best tool(s) for asnwer user input. Do not response with anything else other than the tools needed. List them as a python set. ex. {tool1, tool2, ...}"
+        "content": f"""Choose the best tool(s) for asnwer user input.
+        Available tools are:
+        {available_tools}
+        "Do not response with anything else other than the tools needed. List them as a python set. ex. {tool1, tool2, ...}"""
     }
     user_prompt = {
         "role": "user",
@@ -239,6 +239,27 @@ def format_result():
     pass
 
 
+# --------------------------
+# Build Graph
+# --------------------------
+graph = StateGraph(State)
+
+graph.add_node("decide_tools", tool_decider)
+graph.add_node("fetch_schema", fetch_schema)
+graph.add_node("fan_out_sql_generation", fan_out_sql_generation)
+graph.add_node("evaluate_results", evaluate_results)
+graph.add_node("format_results", format_result)
+
+graph.add_edge(START, "decide_tools")
+graph.add_edge("decide_tools", "fetch_schema")
+#TODO: fix conditional edges
+graph.add_conditional_edges("fetch_schema", fan_out_sql_generation,  "fan_out_sql_generation")
+graph.add_edge("fan_out_sql_generation", "evaluate_results")
+#TODO:
+graph.add_conditional_edges("evaluate_results", "format_results")
+graph.addedge("format_results", END)
+
+app = graph.compile()
 
     
 

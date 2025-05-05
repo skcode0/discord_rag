@@ -304,7 +304,7 @@ async def chat(interaction: discord.Interaction, text: str):
     err_message = "Error getting results"
     try:
         #TODO: will change this logic later (if at least 1 succeeds, don't raise error and work with it)
-        result = graph_builder.invoke({
+        result = app.invoke({
             "user_input": text,
             "embedding": instruct_embedding,
             "dbs": {
