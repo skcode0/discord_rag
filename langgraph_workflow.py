@@ -15,16 +15,18 @@ import torch
 
 load_dotenv(override=True)
 
-quant_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_use_double_quant=True,
-)
+# quant_config = BitsAndBytesConfig(
+#     load_in_4bit=True,
+#     bnb_4bit_use_double_quant=True,
+# )
 
 llm_model = pipeline("text-generation", 
                      model=os.environ.get('LLM_MODEL'),
-                     model_kwargs={
-                        "quantization_config": quant_config
-                     }) 
+                     token=os.environ.get('HF_TOKEN'),
+                    #  model_kwargs={
+                    #     "quantization_config": quant_config
+                    #  }
+                    ) 
 llm = HuggingFacePipeline(pipeline=llm_model)
 
 
@@ -48,9 +50,6 @@ class State(TypedDict):
     query_results: Annotated[list, add_messages]
     messages: Annotated[list, add_messages]
 
-# user input/query --> tools agent (get table schemas, run queries, keep running until no error) --> evaluate (answer good/not good) --> format/synthesize (clean up results) --> end
-
-
 
 # --------------------------
 # For DB querying
@@ -68,18 +67,17 @@ def tool_decider(state: State):
         "content": f"""Choose the best tool(s) for answer user input.
         Available tools are:
         {available_tools}
-        "Do not response with anything else other than the tools needed. List them as a python set."""
+        If tools aren't necessary, don't add any.
+        Do not response with anything else other than the tools needed, and list them as python set."""
     }
     user_prompt = {
         "role": "user",
-        "content": state.user_input
+        "content": state["user_input"]
     }
 
     response = llm.invoke([system_prompt, user_prompt])
-
-    print(response)
     
-    return {"tools_needed": set(response)}
+    return {"tools_needed": response}
 
 
 # --------------------------
@@ -92,13 +90,17 @@ def fetch_schema(state: State) -> Optional[dict]:
 
     Returns string of table schema
     """
-    for tool in state.tools_needed:
-        if tool in state.dbs:
-            db = state.dbs[tool]
+
+    print(state)
+
+    for tool in state["tools_needed"]:
+        if tool in state["dbs"]:
+            db = state["dbs"][tool]
+            print(db, type(db))
             if not db.schemas:
                 db.schemas = db.get_table_schema()
 
-    for db in state.dbs:
+    for db in state["dbs"]:
         print(db.schemas)
 
 
@@ -269,14 +271,15 @@ def fetch_schema(state: State) -> Optional[dict]:
 graph = StateGraph(State)
 
 graph.add_node("decide_tools", tool_decider)
-graph.add_node("fetch_schema", fetch_schema)
+# graph.add_node("fetch_schema", fetch_schema)
 # graph.add_node("fan_out_sql_generation", fan_out_sql_generation)
 # graph.add_node("evaluate_results", evaluate_results)
 # graph.add_node("format_results", format_result)
 
 graph.add_edge(START, "decide_tools")
-graph.add_edge("decide_tools", "fetch_schema")
-graph.add_edge("fetch_schema", END)
+graph.add_edge("decide_tools", END)
+# graph.add_edge("decide_tools", "fetch_schema")
+# graph.add_edge("fetch_schema", END)
 # #TODO: fix conditional edges
 # graph.add_conditional_edges("fetch_schema", fan_out_sql_generation,  "fan_out_sql_generation")
 # graph.add_edge("fan_out_sql_generation", "evaluate_results")

@@ -233,30 +233,33 @@ class AsyncPostgresDataBaseSuperUser(AsyncPostgresDataBaseUser):
         - group_name: name of db group of create
 
         """
-        async with self.engine.begin() as conn:
-            # create group login
-            await conn.execute(text(f"CREATE ROLE {group_name} NOLOGIN NOINHERIT"))
+        try:
+            async with self.engine.begin() as conn:
+                # create group login
+                await conn.execute(text(f"CREATE ROLE {group_name} NOLOGIN NOINHERIT"))
 
-            # database access
-            if isinstance(db_name, list):
-                for db in db_name:
-                    await conn.execute(text(f"GRANT CONNECT ON DATABASE {db} TO {group_name}"))
-            else:
-                await conn.execute(text(f"GRANT CONNECT ON DATABASE  {db_name} TO {group_name}"))
+                # database access
+                if isinstance(db_name, list):
+                    for db in db_name:
+                        await conn.execute(text(f"GRANT CONNECT ON DATABASE {db} TO {group_name}"))
+                else:
+                    await conn.execute(text(f"GRANT CONNECT ON DATABASE  {db_name} TO {group_name}"))
 
-            # schema access
-            await conn.execute(text(f"GRANT USAGE ON SCHEMA public TO {group_name}"))
+                # schema access
+                await conn.execute(text(f"GRANT USAGE ON SCHEMA public TO {group_name}"))
 
-            # table access
-            await conn.execute(text(f"GRANT SELECT ON ALL TABLES IN SCHEMA public TO {group_name}"))
+                # table access
+                await conn.execute(text(f"GRANT SELECT ON ALL TABLES IN SCHEMA public TO {group_name}"))
 
-            # grant SELECT on future tables
-            await conn.execute(text(f"""
-            ALTER DEFAULT PRIVILEGES IN SCHEMA public
-               GRANT SELECT ON TABLES TO {group_name}
-            """))
+                # grant SELECT on future tables
+                await conn.execute(text(f"""
+                ALTER DEFAULT PRIVILEGES IN SCHEMA public
+                GRANT SELECT ON TABLES TO {group_name}
+                """))
 
-            print(f"Created db group: {group_name}.")
+                print(f"Created db group: {group_name}.")
+        except Exception as e:
+            pass
 
     
     async def add_user(self, role_name: str, group_name: str, password: str) -> None:
@@ -268,11 +271,14 @@ class AsyncPostgresDataBaseSuperUser(AsyncPostgresDataBaseUser):
         - password: password for created user
 
         """
-        async with self.engine.begin() as conn:
-            await conn.execute(text(f"CREATE ROLE {role_name} LOGIN PASSWORD :pw"), {"pw": password})
-            await conn.execute(text(f"GRANT {group_name} TO {role_name}"))
-        
-        print(f"{role_name.capitalize()} added to {group_name}.")
+        try:
+            async with self.engine.begin() as conn:
+                await conn.execute(text(f"CREATE ROLE {role_name} LOGIN PASSWORD '{password}'"))
+                await conn.execute(text(f"GRANT {group_name} TO {role_name}"))
+            
+            print(f"{role_name.capitalize()} added to {group_name} for {self.db_name}.")
+        except Exception as e:
+            pass
 
     
     async def add_record(self, table: Type[DeclarativeBase], data: Dict[str, Any]) -> None:

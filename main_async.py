@@ -21,7 +21,8 @@ from tables import CombinedBase, TranscriptionsVectors
 from sonyflake import SonyFlake
 import asyncio
 import textwrap
-# from langgraph_workflow import app
+from langgraph_workflow import app, State
+from langgraph_workflow_copy import agent
 
 # --------------------------
 # start Docker Compose command for DBs (only short term)
@@ -238,14 +239,14 @@ async def chat(interaction: discord.Interaction, text: str):
     await interaction.response.defer()
     
     # Save user's slash command text into db
-    embedding_vector = await create_embedding(model_name=embedding_model, input=text)
-    embedding_vector = await asyncio.to_thread(embedding_vector.tolist())
+    # embedding_vector = await create_embedding(model_name=embedding_model, input=text)
+    # embedding_vector = await asyncio.to_thread(embedding_vector.tolist())
 
-
+    
     #! DUMMY DATA
-    # embedding_vector = [-0.1, 4.3, 45.8, -37.94, 1.1]
+    embedding_vector = [-0.1, 4.3, 45.8, -37.94, 1.1]
     #! DUMMY DATA
-
+    print(embedding_vector[:5])
     data = {
         # Transcriptions
         "trans_id": interaction.id, # snowflake id
@@ -284,31 +285,38 @@ async def chat(interaction: discord.Interaction, text: str):
     task = "Given user's message query, retrieve relevant messages that answer the query."
     instruct_query = get_detailed_instruct(query=text,
                                             task_description=task)
-    # # for querying
-    instruct_embedding = create_embedding(model_name=embedding_model,
-                                          input=instruct_query)
+    # for querying
+    # instruct_embedding = create_embedding(model_name=embedding_model,
+    #                                       input=instruct_query)
+    # instruct_embedding = await asyncio.to_thread(instruct_embedding.tolist())
 
     #! DUMMY DATA
-    # instruct_embedding = [-5.1, 2.9, 0.8, 7.9, 3.1] # fruit
+    instruct_embedding = [-5.1, 2.9, 0.8, 7.9, 3.1] # fruit
     #! DUMMY DATA
-
+    print(instruct_embedding[:5])
+    print("starting langgraph")
     err_message = "Error getting results"
     try:
         #TODO: will change this logic later (if at least 1 succeeds, don't raise error and work with it)
-        # response = app.invoke({
+        # initial_state = {
         #     "user_input": text,
         #     "embedding": instruct_embedding,
+        #     "tools_needed": set(),
         #     "dbs": {
         #         "short_term_db": bot_short,
         #         "long_term_db": bot_long
-        #     }
-        # })
+        #     },
+        #     "query_results": [],
+        #     "messages": []
+        # }
+        # response = app.invoke(input=initial_state)
 
-        # print(response)
-        response = "Some llm response"
+        # response = "Some llm response"
 
         # short_result = await bot_short.query_vector(query=instruct_embedding)
         # long_results = await bot_long.query_vector(query=instruct_embedding)
+
+        response = await agent.ainvoke({"messages": [("user", text)]})
     except Exception as e:
         print(e)
         response = err_message
