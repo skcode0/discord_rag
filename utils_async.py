@@ -86,7 +86,7 @@ class AsyncPostgresDataBaseUser():
 
         self.schemas = None
     
-    # TODO: get col info for all revelent tables
+
     async def get_table_schema(self, tablename: str) -> str:
         """
         Gets table schema.
@@ -113,6 +113,7 @@ class AsyncPostgresDataBaseUser():
             self.schemas = info_str
             return info_str
     
+
     async def get_all_schemas(self) -> list:
         """
         Gets all table schemas
@@ -164,7 +165,6 @@ class AsyncPostgresDataBaseUser():
             return tables
     
 
-    #TODO: do something about params other than query.
     async def query(self, 
                      query: List[Union[int, float]],
                      search_list_size: int = 100,

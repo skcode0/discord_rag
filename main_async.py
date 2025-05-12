@@ -21,8 +21,10 @@ from tables import CombinedBase, TranscriptionsVectors
 from sonyflake import SonyFlake
 import asyncio
 import textwrap
-from langgraph_workflow import app, State
-from langgraph_workflow_copy import agent
+# from langgraph_workflow import app, State
+from langgraph_test import app, State
+from outdated.langgraph_workflow_copy import agent
+from langchain_core.messages import HumanMessage, SystemMessage
 
 # --------------------------
 # start Docker Compose command for DBs (only short term)
@@ -234,6 +236,14 @@ async def chat(interaction: discord.Interaction):
     This bot can access databases to retrieve any relevant discord messages and respond accordingly. Note that the bot will ONLY save and know about the messages starting from it's first run and while running. So any messages sent before inviting and while not running the bot won't be considered.                     
     """)
 
+available_dbs = {
+    "short_term_db": "For messages that was saved today only.",
+    "long_term_db": "For messages that was saved in the past."
+}
+system_prompt = f"""You are a helpful assistant that can use tools to respond to user. You also have access to these databases: 
+    {available_dbs}
+"""
+
 @bot.tree.command(name="chat", description="Chat with AI bot.", guild=GUILD_ID)
 async def chat(interaction: discord.Interaction, text: str):
     await interaction.response.defer()
@@ -263,9 +273,32 @@ async def chat(interaction: discord.Interaction, text: str):
         "index_measurement": "vector_cosine_ops", #* change accordingly
     }
 
+    #TODO----------------------
+    # Create embedding
+    # Note: Some embedding models like 'intfloat/multilingual-e5-large-instruct' require instructions to be added to query. Documents don't need instructions.
+    #! Deal with query embedding instruction as needed.
+    task = "Given user's message query, retrieve relevant messages that answer the query."
+    instruct_query = get_detailed_instruct(query=text,
+                                            task_description=task)
+    # for querying
+    instruct_embedding = create_embedding(model_name=embedding_model,
+                                          input=instruct_query)
+    instruct_embedding = await asyncio.to_thread(instruct_embedding.tolist())
+
+    initial_state = {
+        "embedding": instruct_embedding,
+        "available_dbs": {
+            "short_term_db": bot_short,
+            "long_term_db": bot_long
+        },
+        "messages": [SystemMessage(content=system_prompt),
+                    HumanMessage(content=text)]
+    }
+
     try:
         async with asyncio.TaskGroup() as tg:
             # TODO: run langgraph/agents
+            agent_task = tg.create_task(app.ainvoke(input=initial_state))
             # add to db
             tg.create_task(short_db.add_record(table=TranscriptionsVectors,data=data))
             # save in all-data csv
@@ -278,50 +311,39 @@ async def chat(interaction: discord.Interaction, text: str):
         await write_to_csv_async(full_file_path=not_added_csv_path, 
                     data=data)
 
+    response = agent_task.result()
 
-    # Create embedding
-    # Note: Some embedding models like 'intfloat/multilingual-e5-large-instruct' require instructions to be added to query. Documents don't need instructions.
-    #! Deal with query embedding instruction as needed.
-    task = "Given user's message query, retrieve relevant messages that answer the query."
-    instruct_query = get_detailed_instruct(query=text,
-                                            task_description=task)
-    # for querying
-    # instruct_embedding = create_embedding(model_name=embedding_model,
-    #                                       input=instruct_query)
-    # instruct_embedding = await asyncio.to_thread(instruct_embedding.tolist())
+    # #! DUMMY DATA
+    # instruct_embedding = [-5.1, 2.9, 0.8, 7.9, 3.1] # fruit
+    # #! DUMMY DATA
+    # print(instruct_embedding[:5])
+    # print("starting langgraph")
+    # err_message = "Error getting results"
+    # try:
+    #     #TODO: langgraph
+    #     initial_state = {
+    #         "embedding": instruct_embedding,
+    #         "available_dbs": {
+    #             "short_term_db": bot_short,
+    #             "long_term_db": bot_long
+    #         },
+    #         "messages": [SystemMessage(content=system_prompt),
+    #                      HumanMessage(content=text)]
+    #     }
 
-    #! DUMMY DATA
-    instruct_embedding = [-5.1, 2.9, 0.8, 7.9, 3.1] # fruit
-    #! DUMMY DATA
-    print(instruct_embedding[:5])
-    print("starting langgraph")
-    err_message = "Error getting results"
-    try:
-        #TODO: will change this logic later (if at least 1 succeeds, don't raise error and work with it)
-        # initial_state = {
-        #     "user_input": text,
-        #     "embedding": instruct_embedding,
-        #     "tools_needed": set(),
-        #     "dbs": {
-        #         "short_term_db": bot_short,
-        #         "long_term_db": bot_long
-        #     },
-        #     "query_results": [],
-        #     "messages": []
-        # }
-        # response = app.invoke(input=initial_state)
+    #     response = app.ainvoke(input=initial_state)
 
-        # response = "Some llm response"
+    #     # response = "Some llm response"
 
-        # short_result = await bot_short.query_vector(query=instruct_embedding)
-        # long_results = await bot_long.query_vector(query=instruct_embedding)
+    #     # short_result = await bot_short.query_vector(query=instruct_embedding)
+    #     # long_results = await bot_long.query_vector(query=instruct_embedding)
 
-        response = await agent.ainvoke({"messages": [("user", text)]})
-    except Exception as e:
-        print(e)
-        response = err_message
+    #     response = await agent.ainvoke({"messages": [("user", text)]})
+    # except Exception as e:
+    #     print(e)
+    #     response = err_message
     
-    #TODO----
+    #TODO----------------------
 
     limit = 2000 # message char limit
     if len(response) > limit:
