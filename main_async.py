@@ -242,6 +242,7 @@ available_dbs = {
 }
 system_prompt = f"""You are a helpful assistant that can use tools to respond to user. You also have access to these databases: 
     {available_dbs}
+    Use however many tools and databases needed to respond to user's input.
 """
 
 @bot.tree.command(name="chat", description="Chat with AI bot.", guild=GUILD_ID)
@@ -297,7 +298,7 @@ async def chat(interaction: discord.Interaction, text: str):
 
     try:
         async with asyncio.TaskGroup() as tg:
-            # TODO: run langgraph/agents
+            #TODO: test this
             agent_task = tg.create_task(app.ainvoke(input=initial_state))
             # add to db
             tg.create_task(short_db.add_record(table=TranscriptionsVectors,data=data))
