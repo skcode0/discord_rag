@@ -161,7 +161,7 @@ class MyBot(commands.Bot):
 
         try:
             synced = await self.tree.sync(guild=GUILD_ID)
-            print(f"Syned {len(synced)} commands to guild {GUILD_ID.id}.")
+            print(f"Synced {len(synced)} commands to guild {GUILD_ID.id}.")
         except Exception as e:
             print(f"Error syncing commands: {e}")
             raise
@@ -246,15 +246,32 @@ system_prompt = f"""You are a helpful assistant that can use tools to respond to
 @bot.tree.command(name="chat", description="Chat with AI bot.", guild=GUILD_ID)
 async def chat(interaction: discord.Interaction, text: str):
     await interaction.response.defer()
+
+    #TODO---------------------- 
+    # vector embedding
+    # Note: Some embedding models like 'intfloat/multilingual-e5-large-instruct' require instructions to be added to query. Documents don't need instructions.
+    #! Deal with query embedding instruction as needed.
+    task = "Given user's message query, retrieve relevant messages that answer the query."
+    instruct_query = get_detailed_instruct(query=text,
+                                            task_description=task)
     
-    # Save user's slash command text into db
-    # embedding_vector = await create_embedding(model_name=embedding_model, input=text)
-    # embedding_vector = await asyncio.to_thread(embedding_vector.tolist())
+    async with asyncio.TaskGroup() as tg:
+        # embedding for db
+        task_emb = tg.create_task(create_embedding(model_name=embedding_model, input=text))
+        # query embed
+        task_inst = tg.create_task(create_embedding(model_name=embedding_model, input=instruct_query))
+    
+    embedding_vector = task_emb.result()
+    instruct_embedding = task_inst.result()
+
+    # convert to list
+    embedding_vector, instruct_embedding = await asyncio.gather(
+    asyncio.to_thread(embedding_vector.tolist), asyncio.to_thread(instruct_embedding.tolist))
 
     
-    #! DUMMY DATA
-    embedding_vector = [-0.1, 4.3, 45.8, -37.94, 1.1]
-    #! DUMMY DATA
+    # #! DUMMY DATA
+    # embedding_vector = [-0.1, 4.3, 45.8, -37.94, 1.1]
+    # #! DUMMY DATA
     print(embedding_vector[:5])
     data = {
         # Transcriptions
@@ -272,16 +289,6 @@ async def chat(interaction: discord.Interaction, text: str):
         "index_measurement": "vector_cosine_ops", #* change accordingly
     }
 
-    #TODO----------------------
-    # Create embedding
-    # Note: Some embedding models like 'intfloat/multilingual-e5-large-instruct' require instructions to be added to query. Documents don't need instructions.
-    #! Deal with query embedding instruction as needed.
-    task = "Given user's message query, retrieve relevant messages that answer the query."
-    instruct_query = get_detailed_instruct(query=text,
-                                            task_description=task)
-    # for querying
-    instruct_embedding = await create_embedding(model_name=embedding_model, input=instruct_query)
-    instruct_embedding = await asyncio.to_thread(instruct_embedding.tolist())
 
     initial_state = {
         "embedding": instruct_embedding,
