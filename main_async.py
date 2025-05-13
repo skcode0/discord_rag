@@ -282,8 +282,7 @@ async def chat(interaction: discord.Interaction, text: str):
     instruct_query = get_detailed_instruct(query=text,
                                             task_description=task)
     # for querying
-    instruct_embedding = create_embedding(model_name=embedding_model,
-                                          input=instruct_query)
+    instruct_embedding = await create_embedding(model_name=embedding_model, input=instruct_query)
     instruct_embedding = await asyncio.to_thread(instruct_embedding.tolist())
 
     initial_state = {
