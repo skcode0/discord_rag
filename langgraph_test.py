@@ -6,7 +6,7 @@ from langgraph.types import Send
 from typing import Optional 
 import os
 from dotenv import load_dotenv
-from langchain_huggingface import HuggingFacePipeline
+from langchain_huggingface import HuggingFacePipeline, ChatHuggingFace
 from transformers import pipeline, BitsAndBytesConfig
 import torch
 from utils_async import AsyncPostgresDataBaseUser
@@ -33,8 +33,8 @@ llm_model = pipeline("text-generation",
                     #     "quantization_config": quant_config
                     #  }
                     ) 
-llm = HuggingFacePipeline(pipeline=llm_model)
-
+hf_llm = HuggingFacePipeline(pipeline=llm_model)
+llm = ChatHuggingFace(llm=hf_llm)
 
 # --------------------------
 # Tools
