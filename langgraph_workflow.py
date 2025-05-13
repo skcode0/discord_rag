@@ -115,9 +115,10 @@ class State(TypedDict):
     messages: Annotated[list, add_messages]
 
 
-def assistant(state: State):
+async def assistant(state: State):
+    messages = await llm_with_tools.ainvoke(state["messages"])
     return {
-        "messages": [llm_with_tools.ainvoke(state["messages"])]
+        "messages": messages
     }
 
 builder = StateGraph(State)

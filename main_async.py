@@ -242,7 +242,7 @@ system_prompt = f"""You are a helpful assistant that can use tools to respond to
     {available_dbs}
     Use however many tools and databases needed to respond to user's input.
 """
-
+import numpy as np
 @bot.tree.command(name="chat", description="Chat with AI bot.", guild=GUILD_ID)
 async def chat(interaction: discord.Interaction, text: str):
     await interaction.response.defer()
@@ -255,22 +255,26 @@ async def chat(interaction: discord.Interaction, text: str):
     instruct_query = get_detailed_instruct(query=text,
                                             task_description=task)
     
-    async with asyncio.TaskGroup() as tg:
-        # embedding for db
-        task_emb = tg.create_task(create_embedding(model_name=embedding_model, input=text))
-        # query embed
-        task_inst = tg.create_task(create_embedding(model_name=embedding_model, input=instruct_query))
+    # async with asyncio.TaskGroup() as tg:
+    #     # embedding for db
+    #     task_emb = tg.create_task(create_embedding(model_name=embedding_model, input=text))
+    #     # query embed
+    #     task_inst = tg.create_task(create_embedding(model_name=embedding_model, input=instruct_query))
     
-    embedding_vector = task_emb.result()
-    instruct_embedding = task_inst.result()
+    # embedding_vector = task_emb.result()
+    # instruct_embedding = task_inst.result()
 
-    # convert to list
-    embedding_vector, instruct_embedding = await asyncio.gather(
-    asyncio.to_thread(embedding_vector.tolist), asyncio.to_thread(instruct_embedding.tolist))
+    # # convert to list
+    # embedding_vector, instruct_embedding = await asyncio.gather(
+    # asyncio.to_thread(embedding_vector.tolist), asyncio.to_thread(instruct_embedding.tolist))
 
     
     # #! DUMMY DATA
-    # embedding_vector = [-0.1, 4.3, 45.8, -37.94, 1.1]
+    
+
+    # embedding_vector = np.random.rand(1024).tolist()
+    instruct_embedding = np.random.rand(5).tolist()
+    embedding_vector = [-0.1, 4.3, 45.8, -37.94, 1.1]
     # #! DUMMY DATA
     print(embedding_vector[:5])
     data = {
@@ -306,7 +310,7 @@ async def chat(interaction: discord.Interaction, text: str):
     try:
         async with asyncio.TaskGroup() as tg:
             #TODO: test this
-            agent_task = tg.create_task(app.ainvoke(input=initial_state), config)
+            agent_task = tg.create_task(app.ainvoke(initial_state, config))
             # add to db
             tg.create_task(short_db.add_record(table=TranscriptionsVectors,data=data))
             # save in all-data csv
@@ -319,7 +323,7 @@ async def chat(interaction: discord.Interaction, text: str):
         await write_to_csv_async(full_file_path=not_added_csv_path, 
                     data=data)
 
-    response = agent_task.result()
+    response = await agent_task
 
     # #! DUMMY DATA
     # instruct_embedding = [-5.1, 2.9, 0.8, 7.9, 3.1] # fruit
