@@ -172,7 +172,7 @@ class MyBot(commands.Bot):
         if message.content != "":
             # for storage
             embedding_vector = await create_embedding(model_name=embedding_model, input=message.content)
-            embedding_vector = await asyncio.to_thread(embedding_vector.tolist())
+            embedding_vector = await asyncio.to_thread(embedding_vector.tolist)
 
             #! DUMMY DATA
             # embedding_vector = [-5.1, 2.9, 0.8, 7.9, 3.1] # fruit

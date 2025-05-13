@@ -1244,7 +1244,7 @@ async def create_embedding(model_name: str,
     """
     model = _get_model(model_name)
 
-    embeddings = await asyncio.to_thread(model.encode(input, convert_to_tensor=False, normalize_embeddings=True))
+    embeddings = await asyncio.to_thread(lambda: model.encode(input, convert_to_tensor=False, normalize_embeddings=True))
 
     return embeddings
 
