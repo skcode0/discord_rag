@@ -296,10 +296,13 @@ async def chat(interaction: discord.Interaction, text: str):
                     HumanMessage(content=text)]
     }
 
+    # for in-memory
+    config = {"configurable": {"thread_id": program_session}}
+
     try:
         async with asyncio.TaskGroup() as tg:
             #TODO: test this
-            agent_task = tg.create_task(app.ainvoke(input=initial_state))
+            agent_task = tg.create_task(app.ainvoke(input=initial_state), config)
             # add to db
             tg.create_task(short_db.add_record(table=TranscriptionsVectors,data=data))
             # save in all-data csv

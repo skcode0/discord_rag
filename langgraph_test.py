@@ -14,6 +14,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_core.tools import tool
 from langchain_core.messages import HumanMessage, SystemMessage
+from langgraph.checkpoint.memory import InMemorySaver
 
 # --------------------------
 # LLM
@@ -130,4 +131,8 @@ builder.add_conditional_edges(
 )
 builder.add_edge("tools", "assistant")
 
-app = builder.compile()
+
+# short-term in-memory
+checkpointer = InMemorySaver()
+
+app = builder.compile(checkpointer=checkpointer)
