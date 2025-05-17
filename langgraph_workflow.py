@@ -3,7 +3,7 @@ from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.types import Send
-from typing import Optional 
+from typing import Optional
 import os
 from dotenv import load_dotenv
 from langchain_huggingface import HuggingFacePipeline, ChatHuggingFace
@@ -15,6 +15,8 @@ from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_core.tools import tool
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import InMemorySaver
+from langchain.tools import BaseTool
+
 
 # --------------------------
 # LLM
@@ -29,6 +31,7 @@ load_dotenv(override=True)
 llm_model = pipeline("text-generation", 
                      model=os.environ.get('LLM_MODEL'),
                      token=os.environ.get('HF_TOKEN'),
+                     max_new_tokens=5000,
                     #  model_kwargs={
                     #     "quantization_config": quant_config
                     #  }
@@ -39,7 +42,6 @@ llm = ChatHuggingFace(llm=hf_llm)
 # --------------------------
 # Tools
 # --------------------------
-@tool
 async def query_db(db: type[AsyncPostgresDataBaseUser], input: str, embedding: list) -> list:
     """
     Runs SQL query to retrieve relevant results based on user input and embedding.
@@ -99,9 +101,66 @@ async def query_db(db: type[AsyncPostgresDataBaseUser], input: str, embedding: l
         return await db.query(query=sql)
     except Exception as e:
         return []
+    
+class QueryDB(BaseTool):
+    name: str = "query_db"
+    description: str = "Run semantic SQL queries against Postgres vector database."
+
+    db: AsyncPostgresDataBaseUser
+
+    def _run(self, query: str, embedding: list) -> list:
+        """
+            Run asynchronously.
+
+            Args:
+                query: user input
+                embedding: embedding of user input
+        """
+        return asyncio.run(self._arun(query, embedding))
+    
+    async def _arun(self, query: str, embedding: list) -> list:
+        """
+            Run asynchronously.
+
+            Args:
+                query: user input
+                embedding: embedding of user input
+        """
+        return await query_db(db=self.db, input=query, embedding=embedding)
+
+
+short_db_name = os.environ.get('SHORT_TERM_DB')
+short_port = os.environ.get('SHORT_TERM_HOST_PORT')
+long_db_name = os.environ.get('LONG_TERM_DB')
+long_port = os.environ.get('LONG_TERM_HOST_PORT')
+# bot access
+bot_user = os.environ.get('POSTGRESS_BOT_USER')
+bot_password = os.environ.get('POSTGRES_BOT_PASSWORD')
+embedding_model = os.environ.get('EMBEDDING_MODEL')
+program_session = os.environ.get('PROGRAM_SESSION')
+
+# bot
+bot_short = AsyncPostgresDataBaseUser(password=bot_password,
+                    user=bot_user,
+                    db_name=short_db_name,
+                    port=short_port,
+                    hide_parameters=True)
+bot_long = AsyncPostgresDataBaseUser(password=bot_password,
+                    user=bot_user,
+                    db_name=long_db_name,
+                    port=short_port,
+                    hide_parameters=True)
+
+short_db_tool = QueryDB(db=bot_short)
+short_db_tool.name = "short_term_memory_db"
+short_db_tool.description = "Run semantic SQL queries against Postgres vector database that only stores today's discord messages."
+
+long_db_tool = QueryDB(db=bot_long)
+long_db_tool.name = "long_term_memory_db"
+long_db_tool.description = "Run semantic SQL queries against Postgres vector database that only stores past discord messages."
 
 search_tool = DuckDuckGoSearchRun()
-tools = [query_db, search_tool]
+tools = [short_db_tool, long_db_tool, search_tool]
 
 # --------------------------
 # Graph
@@ -137,3 +196,76 @@ builder.add_edge("tools", "assistant")
 checkpointer = InMemorySaver()
 
 app = builder.compile(checkpointer=checkpointer)
+
+
+
+
+# available_dbs = {
+#     "bot_short": "Short-term memory database where only today's messages are saved.",
+#     "bot_long": "Long-term database memory where all past messges are saved."
+# }
+
+
+# from utils_async import (
+#     AsyncPostgresDataBaseUser,
+#     get_detailed_instruct, 
+#     create_embedding,
+#     )
+# import asyncio
+
+# load_dotenv(override=True)
+# pg_username = os.environ.get('POSTGRESS_USER')
+# pg_password = os.environ.get('POSTGRES_PASSWORD')
+# short_db_name = os.environ.get('SHORT_TERM_DB')
+# short_port = os.environ.get('SHORT_TERM_HOST_PORT')
+# long_db_name = os.environ.get('LONG_TERM_DB')
+# long_port = os.environ.get('LONG_TERM_HOST_PORT')
+# # bot access
+# bot_user = os.environ.get('POSTGRESS_BOT_USER')
+# bot_password = os.environ.get('POSTGRES_BOT_PASSWORD')
+# embedding_model = os.environ.get('EMBEDDING_MODEL')
+# program_session = os.environ.get('PROGRAM_SESSION')
+
+# #! start docker first
+# # bot
+# bot_short = AsyncPostgresDataBaseUser(password=bot_password,
+#                     user=bot_user,
+#                     db_name=short_db_name,
+#                     port=short_port,
+#                     hide_parameters=True)
+# bot_long = AsyncPostgresDataBaseUser(password=bot_password,
+#                     user=bot_user,
+#                     db_name=long_db_name,
+#                     port=short_port,
+#                     hide_parameters=True)
+
+# available_dbs = {
+#     "short_term_db": "For messages that was saved today only.",
+#     "long_term_db": "For messages that was saved in the past."
+# }
+# system_prompt = f"""You are a helpful assistant that can use tools to respond to user. Use however many tools needed to respond to user's input.
+# """
+
+# text = "What is the most popular color?"
+# task = "Given user's message query, retrieve relevant messages that answer the query."
+# instruct_query = get_detailed_instruct(query=text,
+#                                             task_description=task)
+
+# async def main():
+#     instruct_embedding = await create_embedding(model_name=embedding_model, input=instruct_query)
+
+#     initial_state = {
+#             "embedding": instruct_embedding.tolist(),
+#             # "available_dbs": {
+#             #     "short_term_db": bot_short,
+#             #     "long_term_db": bot_long
+#             # },
+#             "messages": [SystemMessage(content=system_prompt),
+#                         HumanMessage(content=text)]
+#     }
+
+#     config = {"configurable": {"thread_id": program_session}}
+#     agent_task = await app.ainvoke(initial_state, config)
+#     print(agent_task["messages"])
+
+# asyncio.run(main())

@@ -234,13 +234,8 @@ async def chat(interaction: discord.Interaction):
     This bot can access databases to retrieve any relevant discord messages and respond accordingly. Note that the bot will ONLY save and know about the messages starting from it's first run and while running. So any messages sent before inviting and while not running the bot won't be considered.                     
     """)
 
-available_dbs = {
-    "short_term_db": "For messages that was saved today only.",
-    "long_term_db": "For messages that was saved in the past."
-}
-system_prompt = f"""You are a helpful assistant that can use tools to respond to user. You also have access to these databases: 
-    {available_dbs}
-    Use however many tools and databases needed to respond to user's input.
+
+system_prompt = f"""You are a helpful assistant that can use tools to respond to user. Use however many tools needed to respond to user's input.
 """
 import numpy as np
 @bot.tree.command(name="chat", description="Chat with AI bot.", guild=GUILD_ID)
@@ -255,26 +250,24 @@ async def chat(interaction: discord.Interaction, text: str):
     instruct_query = get_detailed_instruct(query=text,
                                             task_description=task)
     
-    # async with asyncio.TaskGroup() as tg:
-    #     # embedding for db
-    #     task_emb = tg.create_task(create_embedding(model_name=embedding_model, input=text))
-    #     # query embed
-    #     task_inst = tg.create_task(create_embedding(model_name=embedding_model, input=instruct_query))
+    async with asyncio.TaskGroup() as tg:
+        # embedding for db
+        task_emb = tg.create_task(create_embedding(model_name=embedding_model, input=text))
+        # query embed
+        task_inst = tg.create_task(create_embedding(model_name=embedding_model, input=instruct_query))
     
-    # embedding_vector = task_emb.result()
-    # instruct_embedding = task_inst.result()
+    embedding_vector = task_emb.result()
+    instruct_embedding = task_inst.result()
 
-    # # convert to list
-    # embedding_vector, instruct_embedding = await asyncio.gather(
-    # asyncio.to_thread(embedding_vector.tolist), asyncio.to_thread(instruct_embedding.tolist))
+    # convert to list
+    embedding_vector, instruct_embedding = await asyncio.gather(
+    asyncio.to_thread(embedding_vector.tolist), asyncio.to_thread(instruct_embedding.tolist))
 
     
     # #! DUMMY DATA
-    
-
     # embedding_vector = np.random.rand(1024).tolist()
-    instruct_embedding = np.random.rand(5).tolist()
-    embedding_vector = [-0.1, 4.3, 45.8, -37.94, 1.1]
+    # instruct_embedding = np.random.rand(5).tolist()
+    # embedding_vector = [-0.1, 4.3, 45.8, -37.94, 1.1]
     # #! DUMMY DATA
     print(embedding_vector[:5])
     data = {
@@ -296,10 +289,10 @@ async def chat(interaction: discord.Interaction, text: str):
 
     initial_state = {
         "embedding": instruct_embedding,
-        "available_dbs": {
-            "short_term_db": bot_short,
-            "long_term_db": bot_long
-        },
+        # "available_dbs": {
+        #     "short_term_db": bot_short,
+        #     "long_term_db": bot_long
+        # },
         "messages": [SystemMessage(content=system_prompt),
                     HumanMessage(content=text)]
     }
@@ -323,7 +316,7 @@ async def chat(interaction: discord.Interaction, text: str):
         await write_to_csv_async(full_file_path=not_added_csv_path, 
                     data=data)
 
-    response = await agent_task
+    response = agent_task.result()
 
     # #! DUMMY DATA
     # instruct_embedding = [-5.1, 2.9, 0.8, 7.9, 3.1] # fruit
