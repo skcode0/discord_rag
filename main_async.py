@@ -235,18 +235,20 @@ async def chat(interaction: discord.Interaction):
     """)
 
 
-system_prompt = f"""You are a helpful assistant that can use tools to respond to user. Use however many tools needed to respond to user's input.
+system_prompt = f"""You are a helpful assistant that can use tools to respond to user. Use however many tools needed to respond to user's input. Make sure to use markdown format for discord.
 """
-import numpy as np
+
+# Note: Some embedding models like 'intfloat/multilingual-e5-large-instruct' require instructions to be added to query. Documents don't need instructions.
+#! Deal with query embedding instruction as needed.
+task = "Given user's message query, retrieve relevant messages that answer the query."
+
 @bot.tree.command(name="chat", description="Chat with AI bot.", guild=GUILD_ID)
 async def chat(interaction: discord.Interaction, text: str):
     await interaction.response.defer()
 
     #TODO---------------------- 
     # vector embedding
-    # Note: Some embedding models like 'intfloat/multilingual-e5-large-instruct' require instructions to be added to query. Documents don't need instructions.
-    #! Deal with query embedding instruction as needed.
-    task = "Given user's message query, retrieve relevant messages that answer the query."
+
     instruct_query = get_detailed_instruct(query=text,
                                             task_description=task)
     
@@ -269,7 +271,7 @@ async def chat(interaction: discord.Interaction, text: str):
     # instruct_embedding = np.random.rand(5).tolist()
     # embedding_vector = [-0.1, 4.3, 45.8, -37.94, 1.1]
     # #! DUMMY DATA
-    print(embedding_vector[:5])
+
     data = {
         # Transcriptions
         "trans_id": interaction.id, # snowflake id
@@ -289,10 +291,6 @@ async def chat(interaction: discord.Interaction, text: str):
 
     initial_state = {
         "embedding": instruct_embedding,
-        # "available_dbs": {
-        #     "short_term_db": bot_short,
-        #     "long_term_db": bot_long
-        # },
         "messages": [SystemMessage(content=system_prompt),
                     HumanMessage(content=text)]
     }
@@ -317,40 +315,12 @@ async def chat(interaction: discord.Interaction, text: str):
                     data=data)
 
     response = agent_task.result()
-
-    # #! DUMMY DATA
-    # instruct_embedding = [-5.1, 2.9, 0.8, 7.9, 3.1] # fruit
-    # #! DUMMY DATA
-    # print(instruct_embedding[:5])
-    # print("starting langgraph")
-    # err_message = "Error getting results"
-    # try:
-    #     #TODO: langgraph
-    #     initial_state = {
-    #         "embedding": instruct_embedding,
-    #         "available_dbs": {
-    #             "short_term_db": bot_short,
-    #             "long_term_db": bot_long
-    #         },
-    #         "messages": [SystemMessage(content=system_prompt),
-    #                      HumanMessage(content=text)]
-    #     }
-
-    #     response = app.ainvoke(input=initial_state)
-
-    #     # response = "Some llm response"
-
-    #     # short_result = await bot_short.query_vector(query=instruct_embedding)
-    #     # long_results = await bot_long.query_vector(query=instruct_embedding)
-
-    #     response = await agent.ainvoke({"messages": [("user", text)]})
-    # except Exception as e:
-    #     print(e)
-    #     response = err_message
+    response = response["messages"][-1].content
+    print(response)
+    print(len(response))
     
     #TODO----------------------
-
-    limit = 2000 # message char limit
+    limit = 1900 # message char limit
     if len(response) > limit:
         tw = textwrap.TextWrapper(
             width=limit,
@@ -361,7 +331,11 @@ async def chat(interaction: discord.Interaction, text: str):
         chunks = tw.wrap(response)
         chunks_len = len(chunks)
         for i,c in enumerate(chunks, 1):
-            await interaction.followup.send(f"Page {i}/{chunks_len}: {interaction.user.mention} {c}")
+            try:
+                await interaction.followup.send(f"Page {i}/{chunks_len}: {interaction.user.mention} {c}")
+                await asyncio.sleep(0.1)
+            except Exception as e:
+                print(f"[ERROR] Failed to send chunk {i}: {e}")
     else:
         await interaction.followup.send(f"{interaction.user.mention} {response}")
 

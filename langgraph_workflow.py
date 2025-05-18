@@ -17,7 +17,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langchain.tools import BaseTool
 import asyncio
-
+from pydantic import BaseModel, Field
 
 # --------------------------
 # LLM
@@ -96,6 +96,7 @@ async def query_db(db: type[AsyncPostgresDataBaseUser], input: str, embedding: l
 
     sql = llm.ainvoke([SystemMessage(content=query_system_prompt),
                        HumanMessage(content=input + f"\n Embedding: {embedding}")])
+    print(sql)
 
     # run query
     try:
@@ -161,7 +162,16 @@ long_db_tool.name = "long_term_memory_db"
 long_db_tool.description = "Run semantic SQL queries against Postgres vector database that only stores past discord messages."
 
 search_tool = DuckDuckGoSearchRun()
-tools = [short_db_tool, long_db_tool, search_tool]
+
+
+# formatter
+class ResponseFormatter(BaseModel):
+    """Always use this tool to structure your response to the user."""
+    user_input: str = Field(description="user's input")
+    answer: str = Field(description="The answer to the user's question")
+    found_queries: Optional[str] = Field(description="Relevant queries found in database(s)")
+
+tools = [short_db_tool, long_db_tool, search_tool, ResponseFormatter]
 
 # --------------------------
 # Graph
@@ -171,7 +181,6 @@ llm_with_tools = llm.bind_tools(tools)
 
 class State(TypedDict):
     embedding: list
-    available_dbs: dict
     messages: Annotated[list, add_messages]
 
 
