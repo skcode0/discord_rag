@@ -171,12 +171,13 @@ class ResponseFormatter(BaseModel):
     answer: str = Field(description="The answer to the user's question")
     found_queries: Optional[str] = Field(description="Relevant queries found in database(s)")
 
-tools = [short_db_tool, long_db_tool, search_tool, ResponseFormatter]
+tools = [short_db_tool, long_db_tool, search_tool]
 
 # --------------------------
 # Graph
 # --------------------------
 llm_with_tools = llm.bind_tools(tools)
+# llm_with_tools_strctured = llm.with_structured_output(ResponseFormatter, method="json_schema")
 
 
 class State(TypedDict):
