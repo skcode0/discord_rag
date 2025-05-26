@@ -162,15 +162,6 @@ long_db_tool.description = "Run semantic SQL queries against Postgres vector dat
 
 search_tool = DuckDuckGoSearchRun()
 
-
-#TODO
-# formatter
-class ResponseFormatter(BaseModel):
-    """Always use this tool to structure your response to the user."""
-    user_input: str = Field(description="user's input")
-    answer: str = Field(description="The answer to the user's question")
-    found_queries: Optional[str] = Field(description="Relevant queries found in database(s)")
-
 tools = [short_db_tool, long_db_tool, search_tool]
 
 # --------------------------
@@ -186,7 +177,7 @@ class State(TypedDict):
 
 
 
-system_msg = """
+agent_system_msg = """
     You are a helpful assitant who can use various tools to respond to user messages. Make sure to reason through your actions.
     Finally, format the response in markdown for Discord.
 """
@@ -196,8 +187,31 @@ async def assistant(state: State):
     Agent node
     """
 
-    messages = await llm_with_tools.ainvoke([SystemMessage(system_msg)] + state["messages"])
+    messages = await llm_with_tools.ainvoke([SystemMessage(agent_system_msg)] + state["messages"])
     print(f"AI: {messages[-1].content}")
+
+    return {
+        "messages": messages
+    }
+
+
+#TODO
+formatter_system_msg = """
+    You are a helpful agent that formats the message into markdown style. 
+    Example:
+        Heading: # H1
+        Bold: **bold text**
+        Blockquote: > blockquote
+        <br>: This is the first line <br> And this is another line
+"""
+# formatter
+async def markdown_formatter(state: State):
+    """
+    Formats the message into markdown.
+    """
+
+    messages = await llm_with_tools.ainvoke([SystemMessage(formatter_system_msg)] + state["messages"])
+    print(f"Formatter: {messages[-1].content}")
 
     return {
         "messages": messages
@@ -213,8 +227,10 @@ async def assistant(state: State):
 builder = StateGraph(State)
 builder.add_node("assistant", assistant)
 builder.add_node("tools", ToolNode(tools))
+builder.add_node("markdown_formatter", markdown_formatter)
 
 builder.add_edge(START, "assistant")
+#TODO
 builder.add_conditional_edges(
     "assistant",
     tools_condition,

@@ -311,7 +311,7 @@ async def chat(interaction: discord.Interaction, text: str):
                     data=data)
 
     response = agent_task.result()
-    response = response["messages"][-1].content
+    response = response["messages"][-1].content # bot response
     print(response)
     print(len(response))
     
