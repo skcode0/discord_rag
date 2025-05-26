@@ -33,9 +33,7 @@ llm_model = pipeline("text-generation",
                      model=os.environ.get('LLM_MODEL'),
                      token=os.environ.get('HF_TOKEN'),
                      max_new_tokens=5000,
-                    #  model_kwargs={
-                    #     "quantization_config": quant_config
-                    #  }
+                     return_full_text=False
                     ) 
 hf_llm = HuggingFacePipeline(pipeline=llm_model)
 llm = ChatHuggingFace(llm=hf_llm)
@@ -64,7 +62,7 @@ async def query_db(db: type[AsyncPostgresDataBaseUser], input: str, embedding: l
     # Note: pgvectorscale currently supports: cosine distance (<=>) queries, for indices created with vector_cosine_ops; L2 distance (<->) queries, for indices created with vector_l2_ops; and inner product (<#>) queries, for indices created with vector_ip_ops. This is the same syntax used by pgvector.
     distance_search = "cosine distance, or <=>"
     query_system_prompt = f"""
-        Given an input question, create a syntactically correct {rdbms_type} query to run based on this schema:"
+        Given an input question, create a syntactically correct {rdbms_type} query to run based on this schema:
 
         {db.schemas}
 
@@ -102,6 +100,7 @@ async def query_db(db: type[AsyncPostgresDataBaseUser], input: str, embedding: l
     try:
         return await db.query(query=sql)
     except Exception as e:
+        print("Query error: ", {e})
         return []
     
 class QueryDB(BaseTool):
@@ -164,6 +163,7 @@ long_db_tool.description = "Run semantic SQL queries against Postgres vector dat
 search_tool = DuckDuckGoSearchRun()
 
 
+#TODO
 # formatter
 class ResponseFormatter(BaseModel):
     """Always use this tool to structure your response to the user."""
@@ -185,11 +185,30 @@ class State(TypedDict):
     messages: Annotated[list, add_messages]
 
 
+
+system_msg = """
+    You are a helpful assitant who can use various tools to respond to user messages. Make sure to reason through your actions.
+    Finally, format the response in markdown for Discord.
+"""
+
 async def assistant(state: State):
-    messages = await llm_with_tools.ainvoke(state["messages"])
+    """
+    Agent node
+    """
+
+    messages = await llm_with_tools.ainvoke([SystemMessage(system_msg)] + state["messages"])
+    print(f"AI: {messages[-1].content}")
+
     return {
         "messages": messages
     }
+
+#TODO: create formatter node and create conditional node
+# def should_continue(state: State):
+#     """
+#     Determine if tool calling should end or not
+#     """
+#     if 
 
 builder = StateGraph(State)
 builder.add_node("assistant", assistant)
@@ -210,7 +229,6 @@ app = builder.compile(checkpointer=checkpointer)
 
 
 
-
 # available_dbs = {
 #     "bot_short": "Short-term memory database where only today's messages are saved.",
 #     "bot_long": "Long-term database memory where all past messges are saved."
@@ -222,22 +240,22 @@ app = builder.compile(checkpointer=checkpointer)
 #     get_detailed_instruct, 
 #     create_embedding,
 #     )
-# import asyncio
+# # import asyncio
 
-# load_dotenv(override=True)
-# pg_username = os.environ.get('POSTGRESS_USER')
-# pg_password = os.environ.get('POSTGRES_PASSWORD')
-# short_db_name = os.environ.get('SHORT_TERM_DB')
-# short_port = os.environ.get('SHORT_TERM_HOST_PORT')
-# long_db_name = os.environ.get('LONG_TERM_DB')
-# long_port = os.environ.get('LONG_TERM_HOST_PORT')
-# # bot access
-# bot_user = os.environ.get('POSTGRESS_BOT_USER')
-# bot_password = os.environ.get('POSTGRES_BOT_PASSWORD')
-# embedding_model = os.environ.get('EMBEDDING_MODEL')
-# program_session = os.environ.get('PROGRAM_SESSION')
+# # load_dotenv(override=True)
+# # pg_username = os.environ.get('POSTGRESS_USER')
+# # pg_password = os.environ.get('POSTGRES_PASSWORD')
+# # short_db_name = os.environ.get('SHORT_TERM_DB')
+# # short_port = os.environ.get('SHORT_TERM_HOST_PORT')
+# # long_db_name = os.environ.get('LONG_TERM_DB')
+# # long_port = os.environ.get('LONG_TERM_HOST_PORT')
+# # # bot access
+# # bot_user = os.environ.get('POSTGRESS_BOT_USER')
+# # bot_password = os.environ.get('POSTGRES_BOT_PASSWORD')
+# # embedding_model = os.environ.get('EMBEDDING_MODEL')
+# # program_session = os.environ.get('PROGRAM_SESSION')
 
-# #! start docker first
+# # #! start docker first
 # # bot
 # bot_short = AsyncPostgresDataBaseUser(password=bot_password,
 #                     user=bot_user,
@@ -257,26 +275,31 @@ app = builder.compile(checkpointer=checkpointer)
 # system_prompt = f"""You are a helpful assistant that can use tools to respond to user. Use however many tools needed to respond to user's input.
 # """
 
-# text = "What is the most popular color?"
+# # text = "What is the most popular color?"
 # task = "Given user's message query, retrieve relevant messages that answer the query."
-# instruct_query = get_detailed_instruct(query=text,
-#                                             task_description=task)
+
 
 # async def main():
-#     instruct_embedding = await create_embedding(model_name=embedding_model, input=instruct_query)
+#     while True:
+#         text = input("User: ")
 
-#     initial_state = {
-#             "embedding": instruct_embedding.tolist(),
-#             # "available_dbs": {
-#             #     "short_term_db": bot_short,
-#             #     "long_term_db": bot_long
-#             # },
-#             "messages": [SystemMessage(content=system_prompt),
-#                         HumanMessage(content=text)]
-#     }
+#         instruct_query = get_detailed_instruct(query=text,
+#                                             task_description=task)
 
-#     config = {"configurable": {"thread_id": program_session}}
-#     agent_task = await app.ainvoke(initial_state, config)
-#     print(agent_task["messages"])
+#         instruct_embedding = await create_embedding(model_name=embedding_model, input=instruct_query)
+
+#         initial_state = {
+#                 "embedding": instruct_embedding.tolist(),
+#                 # "available_dbs": {
+#                 #     "short_term_db": bot_short,
+#                 #     "long_term_db": bot_long
+#                 # },
+#                 "messages": [SystemMessage(content=system_prompt),
+#                             HumanMessage(content=text)]
+#         }
+
+#         config = {"configurable": {"thread_id": program_session}}
+#         agent_task = await app.ainvoke(initial_state, config)
+#         print(agent_task["messages"])
 
 # asyncio.run(main())

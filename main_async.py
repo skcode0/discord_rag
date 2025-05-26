@@ -235,9 +235,6 @@ async def chat(interaction: discord.Interaction):
     """)
 
 
-system_prompt = f"""You are a helpful assistant that can use tools to respond to user. Use however many tools needed to respond to user's input. Make sure to use markdown format for Discord.
-"""
-
 # Note: Some embedding models like 'intfloat/multilingual-e5-large-instruct' require instructions to be added to query. Documents don't need instructions.
 #! Deal with query embedding instruction as needed.
 task = "Given user's message query, retrieve relevant messages that answer the query."
@@ -291,8 +288,7 @@ async def chat(interaction: discord.Interaction, text: str):
 
     initial_state = {
         "embedding": instruct_embedding,
-        "messages": [SystemMessage(content=system_prompt),
-                    HumanMessage(content=text)]
+        "messages": HumanMessage(content=text)
     }
 
     # for in-memory
