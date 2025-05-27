@@ -372,7 +372,7 @@ async def chat(interaction: discord.Interaction, text: str):
 
 # create hypertable (time-based partitioning)
 #! Change chunk time interval if needed
-create_hypertable_ddl(table=TranscriptionsVectors, time_col="timestamp", chunk_interval="1 sec")
+create_hypertable_ddl(table=TranscriptionsVectors, time_col="timestamp", chunk_interval="1 hour")
 
 # --------------------------
 # Run main()

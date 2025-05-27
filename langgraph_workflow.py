@@ -208,7 +208,7 @@ class State(TypedDict):
 
 agent_system_msg = """
     You are a helpful assitant who can use various tools to respond to user messages. Make sure to reason through your actions.
-    Finally, format the response in markdown for Discord.
+    Finally, you MUST format the response in markdown for Discord.
     Examples:
         Heading: # H1
         Bold: **bold text**
