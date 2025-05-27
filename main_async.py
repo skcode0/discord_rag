@@ -150,7 +150,6 @@ bot_long = AsyncPostgresDataBaseUser(password=bot_password,
 start_time = datetime(2025,1,1,tzinfo=timezone.utc)
 sf = SonyFlake(start_time=start_time, machine_id=lambda: 1)
 
-
 # --------------------------
 # Store Discord messages as embeddings (+ csv files) and call llm with rag to answer user inputs
 # --------------------------
@@ -319,16 +318,16 @@ async def chat(interaction: discord.Interaction, text: str):
     embedding_vector = await create_embedding(model_name=embedding_model, input=bot_response)
     embedding_vector = await asyncio.to_thread(embedding_vector.tolist)
 
-    # sf_id = sf.next_id()
+    sf_id = sf.next_id()
     data = {
         # Transcriptions
-        "trans_id": sf.next_id(), # snowflake id
+        "trans_id": sf_id, # snowflake id
         "timestamp": datetime.now(timezone.utc), # UTC
         "speaker": str(interaction.client.user),
         "text": bot_response,
 
         # Vectors
-        "vec_id": sf.next_id(),
+        "vec_id": sf_id+1,
         "embedding_model": embedding_model,
         "embedding_dim": embedding_dim,
         "embedding": embedding_vector,
