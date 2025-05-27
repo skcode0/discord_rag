@@ -18,6 +18,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langchain.tools import BaseTool
 import asyncio
 from pydantic import BaseModel, Field
+from langchain_community.retrievers import WikipediaRetriever
 
 # --------------------------
 # LLM
@@ -160,9 +161,37 @@ long_db_tool = QueryDB(db=bot_long)
 long_db_tool.name = "long_term_memory_db"
 long_db_tool.description = "Run semantic SQL queries against Postgres vector database that only stores past discord messages."
 
-search_tool = DuckDuckGoSearchRun()
+# wiki
+@tool
+def wiki_search(query: str) -> list:
+    """
+    Searches Wikipedia.
 
-tools = [short_db_tool, long_db_tool, search_tool]
+    Args:
+        query: Search query
+    """
+    retriever = WikipediaRetriever(top_k_results=3, load_all_available_meta=False)
+    results = retriever.invoke(query)
+
+    return results
+
+# Duck Duck Go search
+@tool
+def web_search(query: str) -> list:
+    """
+    Searches web.
+
+    Args:
+        query: Search query
+    
+    """
+    search = DuckDuckGoSearchRun()
+    
+    return search.invoke(query)
+
+
+# tools = [short_db_tool, long_db_tool, web_search, wiki_search]
+tools = [web_search, wiki_search]
 
 # --------------------------
 # Graph
@@ -180,15 +209,19 @@ class State(TypedDict):
 agent_system_msg = """
     You are a helpful assitant who can use various tools to respond to user messages. Make sure to reason through your actions.
     Finally, format the response in markdown for Discord.
+    Examples:
+        Heading: # H1
+        Bold: **bold text**
+        Blockquote: > blockquote
+        <br>: This is the first line <br> And this is another line
 """
 
 async def assistant(state: State):
     """
     Agent node
     """
-
     messages = await llm_with_tools.ainvoke([SystemMessage(agent_system_msg)] + state["messages"])
-    print(f"AI: {messages[-1].content}")
+    print(f"AI: {messages.content}")
 
     return {
         "messages": messages
@@ -198,24 +231,24 @@ async def assistant(state: State):
 #TODO
 formatter_system_msg = """
     You are a helpful agent that formats the message into markdown style. 
-    Example:
+    Examples:
         Heading: # H1
         Bold: **bold text**
         Blockquote: > blockquote
         <br>: This is the first line <br> And this is another line
 """
 # formatter
-async def markdown_formatter(state: State):
-    """
-    Formats the message into markdown.
-    """
+# async def markdown_formatter(state: State):
+#     """
+#     Formats the message into markdown.
+#     """
 
-    messages = await llm_with_tools.ainvoke([SystemMessage(formatter_system_msg)] + state["messages"])
-    print(f"Formatter: {messages[-1].content}")
+#     messages = await llm.ainvoke([SystemMessage(formatter_system_msg)] + state["messages"])
+#     print(f"Formatter: {messages[-1].content}")
 
-    return {
-        "messages": messages
-    }
+#     return {
+#         "messages": messages
+#     }
 
 #TODO: create formatter node and create conditional node
 # def should_continue(state: State):
@@ -227,7 +260,7 @@ async def markdown_formatter(state: State):
 builder = StateGraph(State)
 builder.add_node("assistant", assistant)
 builder.add_node("tools", ToolNode(tools))
-builder.add_node("markdown_formatter", markdown_formatter)
+# builder.add_node("markdown_formatter", markdown_formatter)
 
 builder.add_edge(START, "assistant")
 #TODO

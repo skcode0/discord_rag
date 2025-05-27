@@ -169,7 +169,7 @@ class MyBot(commands.Bot):
     async def on_message(self, message):
         # Note: If only images/videos/audio/gifs or any other attachments sent, text content will be empty.
         # Note: If storing unstructured data, use multi-modal embedding model (and data lake).
-        if message.content != "":
+        if message.content != "" and message.author != self.user:
             # for storage
             embedding_vector = await create_embedding(model_name=embedding_model, input=message.content)
             embedding_vector = await asyncio.to_thread(embedding_vector.tolist)
@@ -310,12 +310,48 @@ async def chat(interaction: discord.Interaction, text: str):
         await write_to_csv_async(full_file_path=not_added_csv_path, 
                     data=data)
 
-    response = agent_task.result()
-    response = response["messages"][-1].content # bot response
-    print(response)
-    print(len(response))
+    result = agent_task.result()
+    bot_response = result["messages"][-1].content
+    response = f"**Input**: {text} \n\n" + bot_response
     
     #TODO----------------------
+    
+    embedding_vector = await create_embedding(model_name=embedding_model, input=bot_response)
+    embedding_vector = await asyncio.to_thread(embedding_vector.tolist)
+
+    # sf_id = sf.next_id()
+    data = {
+        # Transcriptions
+        "trans_id": sf.next_id(), # snowflake id
+        "timestamp": datetime.now(timezone.utc), # UTC
+        "speaker": str(interaction.client.user),
+        "text": bot_response,
+
+        # Vectors
+        "vec_id": sf.next_id(),
+        "embedding_model": embedding_model,
+        "embedding_dim": embedding_dim,
+        "embedding": embedding_vector,
+        "index_type": "StreamingDiskAnn", #* change accordingly
+        "index_measurement": "vector_cosine_ops", #* change accordingly
+    }
+    
+    try:
+        async with asyncio.TaskGroup() as tg:
+            # add to db
+            tg.create_task(short_db.add_record(table=TranscriptionsVectors,data=data))
+            # save in all-data csv
+            tg.create_task(write_to_csv_async(full_file_path=all_records_csv_path, 
+                        data=data))
+    except* Exception as eg:
+        for e in eg.exceptions:
+            print("Error:", e)
+        # save in not-added csv
+        await write_to_csv_async(full_file_path=not_added_csv_path, 
+                    data=data)
+
+
+
     limit = 1900 # message char limit
     if len(response) > limit:
         tw = textwrap.TextWrapper(
