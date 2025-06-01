@@ -19,25 +19,15 @@ from langchain.tools import BaseTool
 import asyncio
 from pydantic import BaseModel, Field
 from langchain_community.retrievers import WikipediaRetriever
+from langchain_ollama import ChatOllama
+from datetime import datetime, timezone
 
 # --------------------------
 # LLM
 # --------------------------
 load_dotenv(override=True)
 
-# quant_config = BitsAndBytesConfig(
-#     load_in_4bit=True,
-#     bnb_4bit_use_double_quant=True,
-# )
-
-llm_model = pipeline("text-generation", 
-                     model=os.environ.get('LLM_MODEL'),
-                     token=os.environ.get('HF_TOKEN'),
-                     max_new_tokens=5000,
-                     return_full_text=False
-                    ) 
-hf_llm = HuggingFacePipeline(pipeline=llm_model)
-llm = ChatHuggingFace(llm=hf_llm)
+llm = ChatOllama(model=os.environ.get('LLM_MODEL'))
 
 # --------------------------
 # Tools
@@ -189,9 +179,24 @@ def web_search(query: str) -> list:
     
     return search.invoke(query)
 
+# current time
+@tool
+def get_current_time(utc:bool = False) -> datetime:
+    """
+    Get current time, local or UTC
+    
+    Args:
+        utc: Should datetime be in UTC or not
+    """
+    if utc:
+        current_datetime = datetime.now(timezone.utc)
+    else:
+        current_datetime = datetime.now()
+        
+    return current_datetime
 
-# tools = [short_db_tool, long_db_tool, web_search, wiki_search]
-tools = [web_search, wiki_search]
+tools = [short_db_tool, long_db_tool, web_search, wiki_search, get_current_time]
+# tools = [web_search, wiki_search]
 
 # --------------------------
 # Graph
