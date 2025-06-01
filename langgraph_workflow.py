@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 from langchain_community.retrievers import WikipediaRetriever
 from langchain_ollama import ChatOllama
 from datetime import datetime, timezone
+from utils_async import create_embedding
 
 # --------------------------
 # LLM
@@ -32,20 +33,142 @@ llm = ChatOllama(model=os.environ.get('LLM_MODEL'))
 # --------------------------
 # Tools
 # --------------------------
-async def query_db(db: type[AsyncPostgresDataBaseUser], input: str, embedding: list) -> list:
+short_db_name = os.environ.get('SHORT_TERM_DB')
+short_port = os.environ.get('SHORT_TERM_HOST_PORT')
+long_db_name = os.environ.get('LONG_TERM_DB')
+long_port = os.environ.get('LONG_TERM_HOST_PORT')
+# bot access
+bot_user = os.environ.get('POSTGRESS_BOT_USER')
+bot_password = os.environ.get('POSTGRES_BOT_PASSWORD')
+embedding_model = os.environ.get('EMBEDDING_MODEL')
+program_session = os.environ.get('PROGRAM_SESSION')
+
+# list of dbs
+db_registry = {
+    "short_term_db": AsyncPostgresDataBaseUser(password=bot_password,
+                    user=bot_user,
+                    db_name=short_db_name,
+                    port=short_port,
+                    hide_parameters=True),
+    "long_term_db": AsyncPostgresDataBaseUser(password=bot_password,
+                    user=bot_user,
+                    db_name=long_db_name,
+                    port=short_port,
+                    hide_parameters=True)
+}
+
+@tool 
+async def create_embedding_tool(input: str) -> list:
+    """
+    Gets vector embedding for user input.
+
+    Args:
+        input: user input string
+    """
+    embedding_vec = await create_embedding(model_name=embedding_model, input=input)
+    embedding_vec = await asyncio.to_thread(embedding_vec.tolist)
+
+    return embedding_vec
+
+# @tool
+# async def get_db_schemas(db:str) -> str:
+#     """
+#     Gets database schemas, which will be used to create SQL query.
+
+#     Args:
+#         - db: database
+#     """
+#     if db not in db_registry:
+#         return [{"error": f"Unknown database key '{db}'. Expected one of {list(db_registry.keys())}"}]
+
+#     db_client = db_registry[db]
+
+#     # get schema
+#     if not db_client.schemas:
+#         db_client.schemas = await db_client.get_all_schemas()
+
+#     return db_client.schemas
+
+# @tool
+# async def create_sql():
+#     if db not in db_registry:
+#         return [{"error": f"Unknown database key '{db}'. Expected one of {list(db_registry.keys())}"}]
+
+#        # get schema
+#     if not db_client.schemas:
+#         db_client.schemas = await db_client.get_all_schemas()
+
+#     top_k = 5
+#     rdbms_type = "PostgreSQL"
+#     # <=> is cosine DISTANCE (1 - cosine similarity); lower the distance, the better
+#     # Note: pgvectorscale currently supports: cosine distance (<=>) queries, for indices created with vector_cosine_ops; L2 distance (<->) queries, for indices created with vector_l2_ops; and inner product (<#>) queries, for indices created with vector_ip_ops. This is the same syntax used by pgvector.
+#     distance_search = "cosine distance, or <=>"
+#     query_system_prompt = f"""
+#         Given an input question, create a syntactically correct {rdbms_type} query to run based on this schema:
+
+#         {db_client.schemas}
+
+#         To start you should ALWAYS look at the schema to see what you can query. Do NOT skip this step.
+
+#         It's a vector database, so make sure to use {distance_search}.
+#         Unless the user specifies a specific number of examples they wish to obtain, always limit your query to at most {top_k} results.
+
+#         Never query for all the columns from a specific table, only ask for the relevant columns given the question.
+
+#         DO NOT make any DML statements (INSERT, UPDATE, DELETE, DROP etc.) to the database.
+
+#         ex. 'What did user1 say about AI agents 2 days ago?'
+#             WITH relaxed_results AS MATERIALIZED (
+#                 SELECT 
+#                     timestamp,
+#                     speaker,
+#                     text,
+#                     embedding <=> '[...]' AS distance
+#                 FROM transcriptionsvectors
+#                 WHERE speaker = 'user1' AND timestamp = timezone('UTC', now()) - INTERVAL '2 days'
+#                 ORDER BY distance
+#                 LIMIT 5)
+            
+#             SELECT * 
+#             FROM relaxed_results 
+#             ORDER BY distance;
+#     """
+
+#     sql = llm.ainvoke([SystemMessage(content=query_system_prompt),
+#                        HumanMessage(content=input + f"\n Embedding: {embedding}")])
+#     print(sql)
+
+#     # run query
+#     try:
+#         return await db_client.query(query=sql)
+#     except Exception as e:
+#         print("Query error: ", {e})
+#         return []
+
+
+import re
+def remove_think_tags(text):
+    return re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+
+@tool
+async def query_db(db: str, input: str, embedding: list) -> list:
     """
     Runs SQL query to retrieve relevant results based on user input and embedding.
     
     Args:
-        db: database class instance
+        db: database name
         input: input string to use for SQL query
         embedding: input embedding for vector database
-    
-    Returns query results
     """
+
+    if db not in db_registry:
+        return [{"error": f"Unknown database key '{db}'. Expected one of {list(db_registry.keys())}"}]
+
+    db_client = db_registry[db]
+
     # get schema
-    if not db.schemas:
-        db.schemas = await db.get_all_schemas()
+    if not db_client.schemas:
+        db_client.schemas = await db_client.get_all_schemas()
 
     top_k = 5
     rdbms_type = "PostgreSQL"
@@ -53,11 +176,12 @@ async def query_db(db: type[AsyncPostgresDataBaseUser], input: str, embedding: l
     # Note: pgvectorscale currently supports: cosine distance (<=>) queries, for indices created with vector_cosine_ops; L2 distance (<->) queries, for indices created with vector_l2_ops; and inner product (<#>) queries, for indices created with vector_ip_ops. This is the same syntax used by pgvector.
     distance_search = "cosine distance, or <=>"
     query_system_prompt = f"""
+        You are a helpful assistant that can output SQL statement.
         Given an input question, create a syntactically correct {rdbms_type} query to run based on this schema:
 
-        {db.schemas}
+        {db_client.schemas}
 
-        To start you should ALWAYS look at the schema to see what you can query. Do NOT skip this step.
+        To start, you should ALWAYS look at the schema to see what you can query. Do NOT skip this step.
 
         It's a vector database, so make sure to use {distance_search}.
         Unless the user specifies a specific number of examples they wish to obtain, always limit your query to at most {top_k} results.
@@ -81,15 +205,17 @@ async def query_db(db: type[AsyncPostgresDataBaseUser], input: str, embedding: l
             SELECT * 
             FROM relaxed_results 
             ORDER BY distance;
+
+        Output ONLY the sql statement.
     """
 
-    sql = llm.ainvoke([SystemMessage(content=query_system_prompt),
+    sql = await llm.ainvoke([SystemMessage(content=query_system_prompt),
                        HumanMessage(content=input + f"\n Embedding: {embedding}")])
-    print(sql)
+    print(remove_think_tags(sql))
 
     # run query
     try:
-        return await db.query(query=sql)
+        return await db_client.query(query=sql)
     except Exception as e:
         print("Query error: ", {e})
         return []
@@ -121,35 +247,7 @@ class QueryDB(BaseTool):
         return await query_db(db=self.db, input=query, embedding=embedding)
 
 
-short_db_name = os.environ.get('SHORT_TERM_DB')
-short_port = os.environ.get('SHORT_TERM_HOST_PORT')
-long_db_name = os.environ.get('LONG_TERM_DB')
-long_port = os.environ.get('LONG_TERM_HOST_PORT')
-# bot access
-bot_user = os.environ.get('POSTGRESS_BOT_USER')
-bot_password = os.environ.get('POSTGRES_BOT_PASSWORD')
-embedding_model = os.environ.get('EMBEDDING_MODEL')
-program_session = os.environ.get('PROGRAM_SESSION')
 
-# bot
-bot_short = AsyncPostgresDataBaseUser(password=bot_password,
-                    user=bot_user,
-                    db_name=short_db_name,
-                    port=short_port,
-                    hide_parameters=True)
-bot_long = AsyncPostgresDataBaseUser(password=bot_password,
-                    user=bot_user,
-                    db_name=long_db_name,
-                    port=short_port,
-                    hide_parameters=True)
-
-short_db_tool = QueryDB(db=bot_short)
-short_db_tool.name = "short_term_memory_db"
-short_db_tool.description = "Run semantic SQL queries against Postgres vector database that only stores today's discord messages."
-
-long_db_tool = QueryDB(db=bot_long)
-long_db_tool.name = "long_term_memory_db"
-long_db_tool.description = "Run semantic SQL queries against Postgres vector database that only stores past discord messages."
 
 # wiki
 @tool
@@ -192,10 +290,10 @@ def get_current_time(utc:bool = False) -> datetime:
         current_datetime = datetime.now(timezone.utc)
     else:
         current_datetime = datetime.now()
-        
+
     return current_datetime
 
-tools = [short_db_tool, long_db_tool, web_search, wiki_search, get_current_time]
+tools = [create_embedding_tool, query_db, web_search, wiki_search, get_current_time]
 # tools = [web_search, wiki_search]
 
 # --------------------------
@@ -206,15 +304,17 @@ llm_with_tools = llm.bind_tools(tools)
 
 
 class State(TypedDict):
-    embedding: list
     messages: Annotated[list, add_messages]
 
 
+agent_system_msg = f"""
+    You are a helpful, conservational assistant who can respond to user by reasoning through your thoughts and actions using various tools. Use however many tools you need. Note that if the user input doesn't require any tools DO NOT use any tools. Also, unless explicitly specified, don't include your thoughts in the output.
 
-agent_system_msg = """
-    You are a helpful assitant who can use various tools to respond to user messages. Make sure to reason through your actions.
+    You have these databases available: {db_registry.keys()}.
+    You don't need to use database if you think it's not necessary.
+
     Finally, you MUST format the response in markdown for Discord.
-    Examples:
+    Use stuff like these for formatting:
         Heading: # H1
         Bold: **bold text**
         Blockquote: > blockquote
@@ -225,6 +325,7 @@ async def assistant(state: State):
     """
     Agent node
     """
+
     messages = await llm_with_tools.ainvoke([SystemMessage(agent_system_msg)] + state["messages"])
     print(f"AI: {messages.content}")
 

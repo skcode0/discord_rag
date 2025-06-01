@@ -284,10 +284,8 @@ async def chat(interaction: discord.Interaction, text: str):
         "index_measurement": "vector_cosine_ops", #* change accordingly
     }
 
-
     initial_state = {
-        "embedding": instruct_embedding,
-        "messages": HumanMessage(content=text)
+        "messages": HumanMessage(content=f"{str(interaction.user)}: {text}")
     }
 
     # for in-memory

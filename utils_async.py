@@ -166,17 +166,15 @@ class AsyncPostgresDataBaseUser():
     
 
     async def query(self, 
-                     query: List[Union[int, float]],
-                     search_list_size: int = 100,
-                     rescore: int = 50,
-                     top_k: int = 5) -> List[Dict]:
+                    query: List[Union[int, float]],
+                    search_list_size: int = 100,
+                    rescore: int = 50) -> List[Dict]:
         """
         Uses streamingDiskAnn and cosine distance to get the most relevant query answers.
 
         - query: vectorized query input
         - search_list_size: number of additional candidates considered during the graph search
         - rescore: re-evaluating the distances of candidate points to improve the precision of the results
-        - top_k: get top k results
         """  
         async with self.Session() as session:
             # https://github.com/timescale/pgvectorscale/blob/main/README.md?utm_source
@@ -184,7 +182,7 @@ class AsyncPostgresDataBaseUser():
 
             await session.execute(text(f"SET diskann.query_rescore = {rescore};"))
 
-            result = await session.execute(query)
+            result = await session.execute(text(query))
             rows = result.fetchall() # sync
             columns = result.keys()
         
