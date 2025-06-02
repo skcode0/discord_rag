@@ -163,7 +163,6 @@ class AsyncPostgresDataBaseUser():
 
             self.schemas = tables
             return tables
-    
 
     async def query(self, 
                     query: List[Union[int, float]],
