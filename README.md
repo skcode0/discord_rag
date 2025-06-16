@@ -1,6 +1,6 @@
 <h1>Overview</h1>
 
-- A project to learn about RAG, vector DBs, ReAct agents, and LangGraph.
+- A project to learn about RAG, vector DBs, ReAct agents, tools, and LangGraph.
 
 - Discord messages are saved as vector embeddings and retrieved using StreamingDiskAnn. Then LLM will use those results to reason and respond. This is tested on PostgreSQL only.
 
@@ -57,6 +57,8 @@ WHERE hypertable_name = 'transcriptionsvectors';
 - You may have noticed that some functions may be running asynchronously unnecessarily, or that they are not truly async -- as in, they are running on thread (ex. aiofile vs aiofiles). Yes, this adds overhead and can make the code run slower, but there's so many API calls and file I/O that I made the functions (NOT ALL) run in async.
 
 - Server is created for each db (short-term and long-term). If you want, you can configure it to put all dbs in the same server.
+
+- The project aimed to utilize time-aware RAG system, but the result is hit or miss. I've used prompt engineering and different llm models, but the SQL code it produces is often not correct. If I really want to get consistent results, I will need to train the model specific for time-aware vector search. 
 
 
 <h1>pgvectorscale</h1>
