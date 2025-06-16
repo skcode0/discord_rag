@@ -100,7 +100,7 @@ def get_detailed_instruct(task_description: str, query: str) -> str:
     return f'Instruct: {task_description}\nQuery: {query}'
 task = 'Given a user query, retrieve relevant texts that answer the query: '
 
-results = short_retriever.retrieve(get_detailed_instruct(task, 'Who am I?'))
+results = short_retriever.retrieve(get_detailed_instruct(task, 'What did I say 2 days ago?'))
 for node_with_score in results:
     print(node_with_score.node.metadata, node_with_score.node.text[:100])
 

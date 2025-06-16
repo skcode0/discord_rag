@@ -220,34 +220,6 @@ async def query_db(db: str, input: str, embedding: list) -> list:
         print("Query error: ", {e})
         return []
     
-class QueryDB(BaseTool):
-    name: str = "query_db"
-    description: str = "Run semantic SQL queries against Postgres vector database."
-
-    db: AsyncPostgresDataBaseUser
-
-    def _run(self, query: str, embedding: list) -> list:
-        """
-            Run asynchronously.
-
-            Args:
-                query: user input
-                embedding: embedding of user input
-        """
-        return asyncio.run(self._arun(query, embedding))
-    
-    async def _arun(self, query: str, embedding: list) -> list:
-        """
-            Run asynchronously.
-
-            Args:
-                query: user input
-                embedding: embedding of user input
-        """
-        return await query_db(db=self.db, input=query, embedding=embedding)
-
-
-
 
 # wiki
 @tool

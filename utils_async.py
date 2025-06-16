@@ -143,22 +143,10 @@ class AsyncPostgresDataBaseUser():
                     if col.comment:
                         col_info["comment"] = col.comment
                     cols.append(col_info)
-
-            # foreign keys
-            fks = []
-            for fk in insp.get_foreign_keys(tbl_name):
-                fks.append({
-                    "column": fk["constrained_columns"][0],
-                    "references": {
-                        "table": fk["referred_table"],
-                        "column": fk["referred_columns"][0]
-                    }
-                })
             
             tables.append({
                 "table_name": tbl_name,
                 "columns": cols,
-                "foreign_keys": fks,
             })
 
             self.schemas = tables
